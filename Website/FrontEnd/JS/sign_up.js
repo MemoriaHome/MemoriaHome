@@ -42,10 +42,10 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
       first_name: document.getElementById('first-name').value.trim(),
       last_name: document.getElementById('last-name').value.trim(),
       email: document.getElementById('email').value.trim(),
-      password,
+      pass: document.getElementById('password').value,
       phone: document.getElementById('phone').value.trim(),
       specialization: document.getElementById('specialization').value.trim(),
-      licence_number: document.getElementById('licence-number').value.trim(),
+      license_number: document.getElementById('licence-number').value.trim(),
       years_experience: parseInt(document.getElementById('years-experience').value)
     };
 

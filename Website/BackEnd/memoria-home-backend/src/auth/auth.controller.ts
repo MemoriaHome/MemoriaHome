@@ -8,7 +8,7 @@ export class AuthController {
 
 @Post('signup')
 signup(@Body() createCaregiverDto: CreateCaregiverDto) {
-  return this.authService.signup(createCaregiverDto)
+  return this.authService.signup(createCaregiverDto);
 }
 
 }
