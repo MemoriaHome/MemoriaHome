@@ -1,12 +1,26 @@
+import { IsString, IsNumber, IsEmail, Min, Max } from 'class-validator';
 import { CreateUserDto } from "src/Common/create-user.dto";
 
 export class CreateCaregiverDto extends CreateUserDto {
 
-     first_name: string
-     last_name: string
-     phone: string
-     specialization: string
-     license_number: string
-     years_experience: number
+      @IsString()
+     first_name: string;
+
+     @IsString()
+     last_name: string;
+
+     @IsString()
+     phone: string;
+
+     @IsString()
+     specialization: string;
+
+     @IsString()
+     license_number: string;
+
+     @IsNumber()
+     @Min(0)
+     @Max(255)
+     years_experience: number;
 
 }
