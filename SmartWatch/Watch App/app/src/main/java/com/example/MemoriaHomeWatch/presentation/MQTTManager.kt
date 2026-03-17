@@ -45,7 +45,7 @@ class MQTTManager(
         }
     }
 
-    fun mqttPublish(topic: String, msg: String, qos: Int) {
+    fun publish(topic: String, msg: String, qos: Int) {
         try {
             val mqttMessage = MqttMessage(msg.toByteArray(charset("UTF-8")))
 

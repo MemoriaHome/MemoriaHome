@@ -2,6 +2,7 @@ package com.example.MemoriaHomeWatch.presentation
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Icon
@@ -31,12 +33,15 @@ import androidx.wear.tooling.preview.devices.WearDevices
 import com.example.MemoriaHomeWatch.BuildConfig
 import com.example.MemoriaHomeWatch.R
 import com.example.MemoriaHomeWatch.presentation.theme.ConnectToHubTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 
 class MainActivity : ComponentActivity() {
 
     companion object {
-        private lateinit var mqtt: MQTTManager
+        lateinit var mqtt: MQTTManager
 
     }
 
@@ -59,7 +64,7 @@ class MainActivity : ComponentActivity() {
                 WearApp(
                     message = receivedMessage,
                     onButtonClick1 = { mqtt.mqttSubscribe("to-watch", 1) },
-                    onButtonClick2 = { mqtt.mqttPublish("watch-data", "this is a test", 1) },
+                    onButtonClick2 = { mqtt.publish("watch-data", "this is a test", 1) },
                     onButtonClick3 = { startActivity(Intent(this, PermissionActivity::class.java)) }
                 )
             }

@@ -29,6 +29,7 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.tooling.preview.devices.WearDevices
+import com.example.MemoriaHomeWatch.presentation.MainActivity.Companion.mqtt
 import com.samsung.android.service.health.tracking.data.DataPoint
 import com.samsung.android.service.health.tracking.data.HealthTrackerType
 import com.samsung.android.service.health.tracking.data.ValueKey
@@ -65,13 +66,13 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-//        healthSDKManager = HealthSDKManager(this,      ///// initialize samsung's Health Tracking SDK
-//            {startTracking()},
-//            {it.resolve(this)},
-//            {type, p0 -> dataHandleSDK(type, p0)})
-//
-//        healthSDKManager.connect()
-//        healthSDKManager.startTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
+        healthSDKManager = HealthSDKManager(this,      ///// initialize samsung's Health Tracking SDK
+            {startTracking()},
+            {it.resolve(this)},
+            {type, p0 -> dataHandleSDK(type, p0)})
+
+        healthSDKManager.connect()
+        healthSDKManager.startTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
 //        healthSDKManager.startTracker(HealthTrackerType.ACCELEROMETER_CONTINUOUS)
 
 
@@ -88,28 +89,42 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
 
     // handles data from the HealthSDKManager (Samsung's Health Tracking SDK)
     private fun dataHandleSDK(type: HealthTrackerType, p0: List<DataPoint?>) {
-        lifecycleScope.launch(Dispatchers.Default) {
+        lifecycleScope.launch(Dispatchers.IO) {
             for (data in p0) {
                 data ?: continue
 
-                if(type == HealthTrackerType.HEART_RATE_CONTINUOUS){
-                    val hrData = data.getValue(ValueKey.HeartRateSet.HEART_RATE)
-                    launch(Dispatchers.Main) {
-                        // UI changes
+                when (type){
+                    HealthTrackerType.HEART_RATE_CONTINUOUS -> {
+                        val hrData = data.getValue(ValueKey.HeartRateSet.HEART_RATE)
+                        Log.d(TAG, "Sending messages...")
+                        launch {
+                            try {
+                                mqtt.publish("watch-data", hrData.toString(), 1)
+                            } catch (e: Exception) {
+                                Log.e("MQTT", "Publish failed: ${e.message}")
+                            }
+                        }
                         Log.d(TAG, "Heart Rate: $hrData")
                     }
-                    continue
-                }
-                if (type == HealthTrackerType.ACCELEROMETER_CONTINUOUS){
-                    val accelDataX = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_X)
-                    val accelDataY = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_Y)
-                    val accelDataZ = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_Z)
-                    launch(Dispatchers.Main) {
-                        Log.d(TAG, "Accelerometer X: $accelDataX, Accelerometer Y: $accelDataY, Accelerometer Z: $accelDataZ")
+
+                    HealthTrackerType.ACCELEROMETER_CONTINUOUS -> {
+                        val accelDataX = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_X)
+                        val accelDataY = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_Y)
+                        val accelDataZ = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_Z)
+
+                        launch {
+                            try {
+                                var payload = "{\\\"x\\\":$accelDataX, \\\"y\\\":$accelDataY, \\\"z\\\":$accelDataZ}"
+                                mqtt.publish("watch-data", payload, 1)
+                            } catch (e: Exception) {
+                                Log.e("MQTT", "Publish failed: ${e.message}")
+                            }
+                        }
+
+                        Log.d(TAG, "Accelerometer X: $accelDataX, Y: $accelDataY, Z: $accelDataZ")
                     }
-                    continue
+                    else -> { }
                 }
-                // Handle other data types as needed
             }
         }
     }
