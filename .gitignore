@@ -1,3 +1,4 @@
+node_modules/*
 node_modules/yargs/node_modules/ansi-regex/package.json
 node_modules/.bin/glob
 node_modules/.bin/glob.cmd
