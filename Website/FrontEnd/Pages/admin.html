@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="../CSS/admin.css">
+</head>
+<body id="admin-page">
+
+<div class="dashboard">
+
+  <!-- NAVBAR -->
+  <div class="nav-bar">
+    <div class="nav-item" onclick="selectTab(this, 'users')">
+      <i class="icon">👤</i>
+      <p>Users</p>
+    </div>
+
+    <div class="nav-item" onclick="selectTab(this, 'patients')">
+      <i class="icon">👥</i>
+      <p>Patients</p>
+    </div>
+
+    <div class="nav-item" onclick="selectTab(this, 'devices')">
+      <i class="icon">💻</i>
+      <p>Devices</p>
+    </div>
+
+    <div class="nav-item" onclick="selectTab(this, 'alerts')">
+      <i class="icon">⚠️</i>
+      <p>Alerts</p>
+    </div>
+
+    <div class="nav-item" onclick="selectTab(this, 'doctors')">
+      <i class="icon">🩺</i>
+      <p>Doctors</p>
+    </div>
+
+    <div class="nav-item" onclick="selectTab(this, 'reports')">
+      <i class="icon">📄</i>
+      <p>Reports</p>
+    </div>
+
+    <div class="nav-item" onclick="selectTab(this, 'security')">
+      <i class="icon">🔒</i>
+      <p>Security</p>
+    </div>
+  </div>
+
+  <!-- -------------------- TABS -------------------- -->
+
+  <div id="users" class="tab-content"></div>
+
+  <div id="patients" class="tab-content">
+    <h2>Manage Patients</h2>
+
+    <div class="form-card">
+  <h2>Add Patient</h2>
+
+  <input type="text" id="first_name" placeholder="First Name">
+  <input type="text" id="last_name" placeholder="Last Name">
+  <input type="date" id="date_of_birth" placeholder="Date of Birth">
+  <select id="gender">
+    <option value="">Select Gender</option>
+    <option>Male</option>
+    <option>Female</option>
+    <option>Other</option>
+  </select>
+
+  <input type="text" id="emergency_contact" placeholder="Emergency Contact">
+  <input type="text" id="emergency_contact_name" placeholder="Emergency Contact Name">
+  <input type="text" id="address" placeholder="Address">
+  <select id="dementia_stage">
+    <option value="">Select Dementia Stage</option>
+    <option>Stage 1</option>
+    <option>Stage 2</option>
+    <option>Stage 3</option>
+    <option>Stage 4</option>
+  </select>
+
+  <button onclick="addPatient()">Add Patient</button>
+</div>
+
+    <div class="patients-card">
+      <table id="patients-table">
+        <thead>
+          <tr>
+            <th>First Name</th>
+            <th>Last Name</th>
+            <th>Date of Birth</th>
+            <th>Gender</th>
+            <th>Emergency Contact</th>
+            <th>Emergency Contact Name</th>
+            <th>Address</th>
+            <th>Dementia Stage</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="devices" class="tab-content"></div>
+  <div id="alerts" class="tab-content"></div>
+  <div id="doctors" class="tab-content"></div>
+  <div id="reports" class="tab-content"></div>
+  <div id="security" class="tab-content"></div>
+
+</div>
+
+<script src="../JS/admin.js"></script>
+</body>
+</html>

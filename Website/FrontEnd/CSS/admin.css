@@ -1,0 +1,83 @@
+.nav-bar {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+
+    position: fixed;   
+    bottom: 0;         
+    left: 0;           
+
+    width: 100%;       
+    height: 80px;     
+
+    background-color: #C8E2D9;
+    padding: 10px 0;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.2);
+    z-index: 1000;     
+}
+
+.nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    flex: 1;                 
+    max-width: 120px;        
+
+    padding: 8px 0;
+    cursor: pointer;
+    color: #01474D;
+    border-radius: 10px;
+    transition: 0.3s;
+}
+
+.nav-item .icon {
+    font-size: 26px;
+    margin-bottom: 5px;
+    transition: transform 0.2s;
+}
+
+.nav-item p {
+    font-size: 14px;
+    margin: 0;
+}
+
+.nav-item.active {
+    background-color: #83C5BE;
+}
+
+.nav-item.active .icon {
+    transform: scale(1.3);
+}
+
+.nav-item.active p {
+    color: white;
+    font-weight: bold;
+}
+
+.nav-item:hover {
+    background-color: #B9DEDA;
+}
+
+#admin-page {
+    background-image: url('../Assets/admin.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    min-height: 100vh;
+
+    padding-bottom: 100px;
+}
+
+#patients .form-card {
+  margin: 20px auto;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
