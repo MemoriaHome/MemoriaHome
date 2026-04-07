@@ -4,6 +4,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CaregiverModule } from './caregiver/caregiver.module'
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [TypeOrmModule.forRoot({
@@ -18,6 +19,7 @@ import { CaregiverModule } from './caregiver/caregiver.module'
     }),
     CaregiverModule,
     AuthModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

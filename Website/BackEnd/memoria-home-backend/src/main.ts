@@ -12,7 +12,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, { httpsOptions });
   app.enableCors(); //this is added to stop the browser from blocking communication between ports when testing 
-  await app.listen(3000);
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
+  await app.listen(3000);
 }
 bootstrap();
