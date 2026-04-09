@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany} from 'typeorm';
+import { PatientCaregiver } from '../entities/patientToCaregiver.entity';
 
 @Entity('caregivers') //table name in the database
 export class Caregiver {
@@ -23,5 +24,8 @@ export class Caregiver {
 
     @Column()
     years_experience: number;
+
+    @OneToMany(() => PatientCaregiver, (pc) => pc.caregiver)
+    assignments: PatientCaregiver[];
 
 }

@@ -36,7 +36,7 @@
   </div>
 
   <!-- TABS -->
-  <div id="users"    class="tab-content"></div>
+  <div id="users" class="tab-content"></div>
 
   <div id="patients" class="tab-content">
     <div class="page-header">
@@ -44,7 +44,7 @@
       <p>Onboard and manage patients in the system</p>
     </div>
 
-    <!-- FORM -->
+    <!-- ONBOARD FORM -->
     <div class="form-card">
       <h3>Onboard New Patient</h3>
       <div class="form-grid">
@@ -94,11 +94,11 @@
       </div>
       <div class="form-actions">
         <button class="btn-primary" onclick="addPatient()">Onboard Patient</button>
-        <button class="btn-ghost"   onclick="clearForm()">Clear</button>
+        <button class="btn-ghost" onclick="clearForm()">Clear</button>
       </div>
     </div>
 
-    <!-- TABLE -->
+    <!-- PATIENTS TABLE -->
     <div class="table-card">
       <div class="table-card-header">
         <h3>Registered Patients</h3>
@@ -133,6 +133,41 @@
   <div id="security" class="tab-content"></div>
 
 </div>
+
+<!-- ── ASSIGN CAREGIVER MODAL ── -->
+<div id="assign-modal-overlay" class="modal-overlay" onclick="closeAssignModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+
+    <div class="modal-header">
+      <div>
+        <h2 id="modal-patient-name">Assign Caregivers</h2>
+        <p id="modal-patient-id" class="modal-subtitle"></p>
+      </div>
+      <button class="modal-close" onclick="closeAssignModal()">✕</button>
+    </div>
+
+    <!-- Currently assigned caregivers -->
+    <div class="modal-section">
+      <h4 class="modal-section-title">Currently Assigned</h4>
+      <div id="assigned-caregivers-list">
+        <p class="muted-text">Loading...</p>
+      </div>
+    </div>
+
+    <!-- Assign new caregiver -->
+    <div class="modal-section">
+      <h4 class="modal-section-title">Assign New Caregiver</h4>
+      <div class="assign-row">
+        <select id="caregiver-select" class="caregiver-select">
+          <option value="">Select a caregiver...</option>
+        </select>
+        <button class="btn-primary" onclick="assignCaregiver()">Assign</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <script src="../JS/admin.js"></script>
 </body>
 </html>

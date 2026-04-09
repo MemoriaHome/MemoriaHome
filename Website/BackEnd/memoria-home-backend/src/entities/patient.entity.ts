@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { User } from './user.entity';
+import { PatientCaregiver } from '../entities/patientToCaregiver.entity';
 
 @Entity('patients')
 export class Patient {
@@ -46,5 +47,8 @@ export class Patient {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  @OneToMany(() => PatientCaregiver, (pc) => pc.patient)
+  assignments: PatientCaregiver[];
 
 }
