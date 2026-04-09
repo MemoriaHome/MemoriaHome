@@ -56,6 +56,15 @@ CREATE TABLE patient_caregivers (
     UNIQUE(patient_id, caregiver_id)
 );
 
+CREATE TABLE shift (
+	shift_id SERIAL PRIMARY KEY,
+    assignment_id INTEGER REFERENCES patient_caregivers(assignment_id) ON DELETE CASCADE,
+    shift_type VARCHAR(20) NOT NULL CHECK (shift_type IN ('morning', 'afternoon', 'evening')),
+    clock_in TIMESTAMP,
+    clock_out TIMESTAMP,
+	total_shift TIMESTAMP
+);
+
 CREATE INDEX idx_patient_caregivers_patient ON patient_caregivers(patient_id);
 CREATE INDEX idx_patient_caregivers_caregiver ON patient_caregivers(caregiver_id);
 
