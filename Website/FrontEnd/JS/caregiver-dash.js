@@ -1,8 +1,17 @@
 // ── CONFIG ───────────────────────────────────────────────────────────────────
 const API_BASE = 'https://localhost:3000';
 
-// TODO: replace with real caregiver ID from session/login once auth is wired up
-const CAREGIVER_ID = 1;
+const token = localStorage.getItem("access_token");
+
+let CAREGIVER_ID = null
+
+if(token){
+  const payload = token.split('.')[1]
+  const decodedPayload =  JSON.parse(atob(payload))
+  CAREGIVER_ID = decodedPayload.rid
+}else{
+  window.location.href = '../Pages/log_in.html';
+}
 
 // Loaded from API
 let caregiverData = null;
