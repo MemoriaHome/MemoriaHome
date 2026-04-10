@@ -5,6 +5,7 @@ import { UpdateCaregiverDto } from './dto/update-caregiver.dto';
 
 @Controller('caregiver')
 export class CaregiverController {
+
   constructor(private readonly caregiverService: CaregiverService) {}
 
   @Post()
@@ -22,6 +23,12 @@ export class CaregiverController {
     return this.caregiverService.findOne(+id);
   }
 
+  // Returns the caregiver's profile + all their assigned patients
+  @Get(':id/patients')
+  getMyPatients(@Param('id') id: string) {
+    return this.caregiverService.getMyPatients(+id);
+  }
+
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateCaregiverDto: UpdateCaregiverDto) {
     return this.caregiverService.update(+id, updateCaregiverDto);
@@ -31,4 +38,5 @@ export class CaregiverController {
   remove(@Param('id') id: string) {
     return this.caregiverService.remove(+id);
   }
+
 }
