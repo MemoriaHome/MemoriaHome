@@ -130,6 +130,26 @@ export class WebrtcGateway implements OnGatewayDisconnect {
     );
   }
 
+
+    // ── SWITCH FEED ──────────────────────────────────────────────────────────
+@SubscribeMessage('switch-camera-feed')
+handleSwitchCameraFeed(
+  @MessageBody()
+  body: { targetSocketId: string; feedType: string },
+  @ConnectedSocket() client: Socket,
+) {
+  const { targetSocketId, feedType } = body;
+
+  this.server.to(targetSocketId).emit('switch-camera-feed', {
+    feedType,
+    caregiverSocketId: client.id,
+  });
+
+  console.log(
+    `[Gateway] Caregiver ${client.id} requested ${feedType} feed from device ${targetSocketId}`,
+  );
+}
+
   // ── DISCONNECT HANDLING ────────────────────────────────────────────────────
   handleDisconnect(client: Socket) {
     if (this.devices.has(client.id)) {

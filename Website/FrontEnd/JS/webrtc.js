@@ -225,6 +225,25 @@ async function startCall(deviceId, socketId) {
     console.error('[WebRTC] Offer error:', e);
     setCamStatus('error', 'Failed to create offer');
   }
+
+  const feedSelector = document.getElementById('feedSelector');
+
+  feedSelector.addEventListener('change', (e) => {
+  const feedType = e.target.value;
+
+  if (!socket || !deviceSocketId) {
+    console.warn('[WebRTC] Cannot switch feed: device not connected');
+    return;
+  }
+
+  socket.emit('switch-camera-feed', {
+    targetSocketId: deviceSocketId,
+    feedType,
+  });
+
+  console.log('[WebRTC] Requested feed switch to:', feedType);
+});
+
 }
 
 // ── DISCONNECT ───────────────────────────────────────────────────────────────
