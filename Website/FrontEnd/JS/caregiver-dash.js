@@ -14,8 +14,9 @@ if(token){
 }
 
 // Loaded from API
-let caregiverData = null;
-let patientData   = [];
+let caregiverData  = null;
+let patientData    = [];
+let currentPatient = null; // The patient whose profile is open (used by webrtc.js)
 
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────────────────
@@ -108,6 +109,7 @@ function renderPatientList() {
 // ── VIEW PATIENT PROFILE ──────────────────────────────────────────────────────
 function viewPatient(index) {
   const p = patientData[index];
+  currentPatient = p; // expose to webrtc.js
 
   document.getElementById('profile-avatar').textContent = getInitials(p.first_name, p.last_name);
   document.getElementById('profile-name').textContent   = p.first_name + ' ' + p.last_name;
@@ -149,6 +151,8 @@ function viewPatient(index) {
 }
 
 function closeProfile() {
+  if (typeof disconnectCamera === 'function') disconnectCamera();
+  currentPatient = null;
   openTab('patients');
 }
 

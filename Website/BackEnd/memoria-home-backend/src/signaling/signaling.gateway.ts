@@ -2,56 +2,143 @@ import {
   WebSocketGateway,
   WebSocketServer,
   SubscribeMessage,
-  MessageBody,
   ConnectedSocket,
+  MessageBody,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { DeviceRegistryService } from './device-registry.service';
+
+interface DeviceInfo {
+  deviceId: string;
+  patientId: string;
+  room: string;
+  socketId: string;
+}
 
 @WebSocketGateway({
   cors: {
     origin: '*',
   },
 })
-export class SignalingGateway implements OnGatewayDisconnect {
+export class WebrtcGateway implements OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly deviceRegistry: DeviceRegistryService) {}
+  // Map socketId → DeviceInfo
+  private devices = new Map<string, DeviceInfo>();
 
-  // Called by the Kinect C# app on connect
+  // ── DEVICE REGISTRATION ────────────────────────────────────────────────────
   @SubscribeMessage('register-device')
   handleRegisterDevice(
-    @MessageBody() data: [string, string, string], // [device_id, patient_id, room]
+    @MessageBody() data: [string, string, string],
     @ConnectedSocket() client: Socket,
   ) {
     const [deviceId, patientId, room] = data;
 
-    this.deviceRegistry.register({
+    const device: DeviceInfo = {
       deviceId,
       patientId,
       room,
       socketId: client.id,
-      connectedAt: new Date(),
-    });
+    };
 
-    // Acknowledge back to the device
-    client.emit('device-registered', {
-      success: true,
-      deviceId,
-      patientId,
-      room,
-    });
+    this.devices.set(client.id, device);
+    client.join(`patient-${patientId}`);
 
-    console.log(`[SignalingGateway] Device registered: ${deviceId} (socket: ${client.id})`);
+    console.log(
+      `[Gateway] Device registered: ${deviceId} (patient ${patientId}, socket ${client.id})`,
+    );
   }
 
-  // Clean up when the device disconnects
+  // ── CAREGIVER JOINS ────────────────────────────────────────────────────────
+  @SubscribeMessage('join-as-caregiver')
+  handleJoinAsCaregiver(
+    @MessageBody() body: { patientId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const { patientId } = body;
+    client.join(`patient-${patientId}`);
+
+    const devices = Array.from(this.devices.values()).filter(
+      (d) => d.patientId === patientId,
+    );
+
+    if (devices.length > 0) {
+      client.emit('devices-available', { devices });
+    } else {
+      client.emit('no-devices');
+    }
+
+    console.log(
+      `[Gateway] Caregiver ${client.id} joined patient ${patientId}`,
+    );
+  }
+
+  // ── WEBRTC OFFER ───────────────────────────────────────────────────────────
+  @SubscribeMessage('webrtc-offer')
+  handleWebrtcOffer(
+    @MessageBody()
+    body: { targetSocketId: string; sdp: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const { targetSocketId, sdp } = body;
+
+    this.server.to(targetSocketId).emit('webrtc-offer', {
+      sdp,
+      caregiverSocketId: client.id,
+    });
+
+    console.log(
+      `[Gateway] Offer from caregiver ${client.id} → device ${targetSocketId}`,
+    );
+  }
+
+  // ── WEBRTC ANSWER ──────────────────────────────────────────────────────────
+  @SubscribeMessage('webrtc-answer')
+  handleWebrtcAnswer(
+    @MessageBody() data: [string, string],
+    @ConnectedSocket() client: Socket,
+  ) {
+    const [caregiverSocketId, sdp] = data;
+
+    this.server.to(caregiverSocketId).emit('webrtc-answer', {
+      sdp,
+      deviceSocketId: client.id,
+    });
+
+    console.log(
+      `[Gateway] Answer from device ${client.id} → caregiver ${caregiverSocketId}`,
+    );
+  }
+
+  // ── ICE CANDIDATE ──────────────────────────────────────────────────────────
+  @SubscribeMessage('ice-candidate')
+  handleIceCandidate(
+    @MessageBody()
+    body: { targetSocketId: string; candidate: any },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const { targetSocketId, candidate } = body;
+
+    this.server.to(targetSocketId).emit('ice-candidate', {
+      candidate,
+      fromSocketId: client.id,
+    });
+
+    console.log(
+      `[Gateway] ICE candidate from ${client.id} → ${targetSocketId}`,
+    );
+  }
+
+  // ── DISCONNECT HANDLING ────────────────────────────────────────────────────
   handleDisconnect(client: Socket) {
-    const removed = this.deviceRegistry.unregister(client.id);
-    if (removed) {
-      console.log(`[SignalingGateway] Device disconnected and removed: ${removed.deviceId}`);
+    if (this.devices.has(client.id)) {
+      console.log(
+        `[Gateway] Device disconnected: ${this.devices.get(client.id)} (${client.id})`,
+      );
+      this.devices.delete(client.id);
+    } else {
+      console.log(`[Gateway] Client disconnected: ${client.id}`);
     }
   }
 }

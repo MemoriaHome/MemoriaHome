@@ -149,17 +149,39 @@
         <button class="ptab-btn active-ptab" onclick="showProfileTab('overview', this)">Overview</button>
         <button class="ptab-btn" onclick="showProfileTab('medical', this)">Medical</button>
         <button class="ptab-btn" onclick="showProfileTab('contact', this)">Contact</button>
-        <button class="ptab-btn" onclick="showProfileTab('camera', this)">Camera</button>
+        <button class="ptab-btn" onclick="showProfileTab('camera', this); initCamera()">Camera</button>
       </div>
 
       <div id="overview" class="profile-section active-psection"></div>
       <div id="medical"  class="profile-section"></div>
       <div id="contact"  class="profile-section"></div>
-      <div id="camera"   class="profile-section">
-        <div class="camera-placeholder">
-          <div class="camera-icon">📷</div>
-          <p class="camera-label">Camera</p>
+
+      <!-- CAMERA TAB -->
+      <div id="camera" class="profile-section">
+
+        <!-- Status bar -->
+        <div class="cam-status-bar">
+          <span class="cam-status-dot" id="cam-dot"></span>
+          <span class="cam-status-text" id="cam-status-text">Not connected</span>
+          <button class="cam-disconnect-btn" id="cam-disconnect-btn" onclick="disconnectCamera()" style="display:none">
+            Disconnect
+          </button>
         </div>
+
+        <!-- Device picker (shown when multiple devices available) -->
+        <div id="cam-device-list" class="cam-device-list" style="display:none"></div>
+
+        <!-- Video feed -->
+        <div class="cam-video-wrap">
+          <!-- Placeholder shown before connection -->
+          <div class="camera-placeholder" id="cam-placeholder">
+            <div class="camera-icon">📷</div>
+            <p class="camera-label">Camera feed will appear here</p>
+          </div>
+          <!-- Video element shown during call -->
+          <video id="cam-video" autoplay playsinline style="display:none; width:100%; border-radius:var(--radius);"></video>
+        </div>
+
       </div>
     </div>
 
@@ -194,6 +216,8 @@
 
   </main>
 
-<script src="../JS/caregiver-dash.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="../JS/caregiver-dash.js"></script>
+  <script src="../JS/webrtc.js"></script>
 </body>
 </html>

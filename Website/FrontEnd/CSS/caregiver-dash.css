@@ -529,3 +529,76 @@ body {
 /* ── HELPERS ── */
 .loading-msg { color: var(--text-muted); font-size: 15px; padding: 30px 0; text-align: center; }
 .error-msg   { color: var(--danger);     font-size: 14px; padding: 30px 0; text-align: center; }
+
+/* ── CAMERA TAB ── */
+.cam-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: var(--white);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.cam-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #ccc;
+}
+.cam-status-dot--idle       { background: #ccc; }
+.cam-status-dot--searching  { background: var(--warning); animation: pulse 1.2s infinite; }
+.cam-status-dot--connected  { background: #22c55e; }
+.cam-status-dot--error      { background: var(--danger); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.cam-status-text    { font-size: 14px; color: var(--text-muted); flex: 1; }
+
+.cam-disconnect-btn {
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 5px 14px;
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.cam-disconnect-btn:hover { background: var(--danger-pale); }
+
+.cam-video-wrap {
+  width: 100%;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.cam-device-list {
+  margin-bottom: 14px;
+  padding: 14px;
+  background: var(--white);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+.cam-device-label { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
+.cam-device-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font);
+  font-size: 15px;
+  padding: 10px 14px;
+  margin-bottom: 6px;
+  background: var(--mint-bg);
+  border: 1px solid var(--teal-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text-dark);
+  cursor: pointer;
+}
+.cam-device-btn:hover { background: var(--mint-card); }
