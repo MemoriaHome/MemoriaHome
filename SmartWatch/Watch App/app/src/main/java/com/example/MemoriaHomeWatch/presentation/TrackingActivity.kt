@@ -29,6 +29,7 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.tooling.preview.devices.WearDevices
+import com.example.MemoriaHomeWatch.BuildConfig
 import com.example.MemoriaHomeWatch.presentation.MainActivity.Companion.mqtt
 import com.samsung.android.service.health.tracking.data.DataPoint
 import com.samsung.android.service.health.tracking.data.HealthTrackerType
@@ -47,7 +48,21 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
             val heartRatePoints = data.getData(DataType.HEART_RATE_BPM)
             if (heartRatePoints.isNotEmpty()) {
                 val latest = heartRatePoints.last()
+
                 Log.d(TAG, "HEART_RATE_BPM: ${latest.value}")
+
+                val hrValue = latest.value
+                Log.d(TAG, "HEART_RATE_BPM: $hrValue")
+
+                try {
+                    mqtt.publish("watch-data", hrValue.toString(), 1)
+                } catch (e: Exception) {
+                    Log.d("MQTT", "Publish failed: ${e.message}")
+                    if (e.message == "Client is not connected"){
+                        mqtt.mqttConnect(BuildConfig.MQTT_BROKER, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false )
+                    }
+                }
+
             }
             // Handle other data types as needed
         }
@@ -77,6 +92,9 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
 
 
 //        healthServicesManager = HealthServicesManager(this)      ///// initialize google's Health Service
+
+        healthServicesManager = HealthServicesManager(this)      ///// initialize google's Health Service
+
 //        healthServicesManager.startPassiveMonitoring(setOf(DataType.HEART_RATE_BPM), {data -> dataHandlePassive(data)}, false)
 
         setContent {
@@ -96,12 +114,17 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
                 when (type){
                     HealthTrackerType.HEART_RATE_CONTINUOUS -> {
                         val hrData = data.getValue(ValueKey.HeartRateSet.HEART_RATE)
+
                         Log.d(TAG, "Sending messages...")
+
                         launch {
                             try {
                                 mqtt.publish("watch-data", hrData.toString(), 1)
                             } catch (e: Exception) {
+
                                 Log.e("MQTT", "Publish failed: ${e.message}")
+
+                                Log.d("MQTT", "Publish failed: ${e.message}")
                             }
                         }
                         Log.d(TAG, "Heart Rate: $hrData")
@@ -155,6 +178,9 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
         Log.d(TAG, "TrackingActivity Destroyed")
         if(::mSensorManager.isInitialized){ mSensorManager.unregisterListener(this); }
         //healthSDKManager.disconnect()
+
+        healthServicesManager.stopPassiveCallback()
+        healthServicesManager.stopPassiveService()
     }
 
     override fun onAccuracyChanged(p0: Sensor?, p1: Int) {
@@ -184,6 +210,7 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
         startOffBodySensor()
         //healthSDKManager.startTracker(HealthTrackerType.ACCELEROMETER_CONTINUOUS)
         //healthSDKManager.startTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
+        healthSDKManager.startTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
         buttontext = "Stop Tracking"
         isTracking = true
     }
@@ -197,6 +224,7 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
         } else {
             startOffBodySensor()
             //healthSDKManager.resumeAllTrackers()
+            mqtt.mqttConnect(BuildConfig.MQTT_BROKER, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false )
             buttontext = "Stop Tracking"
             isTracking = true
         }

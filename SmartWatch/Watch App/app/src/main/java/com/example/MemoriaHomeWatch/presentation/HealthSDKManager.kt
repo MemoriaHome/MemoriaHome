@@ -27,6 +27,7 @@ class HealthSDKManager (
     val connectionListener = object : ConnectionListener {
         override fun onConnectionSuccess() {  // do when connected
             Log.d(TAG, "Connection success")
+            Log.d(TAG, "SDK Connection success")
             isConnected = true
             onConnected()
         }
