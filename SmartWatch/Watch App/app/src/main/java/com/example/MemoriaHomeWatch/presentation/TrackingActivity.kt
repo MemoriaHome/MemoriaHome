@@ -87,7 +87,7 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
             {type, p0 -> dataHandleSDK(type, p0)})
 
         healthSDKManager.connect()
-        healthSDKManager.startTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
+//        healthSDKManager.startTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
 //        healthSDKManager.startTracker(HealthTrackerType.ACCELEROMETER_CONTINUOUS)
 
 
@@ -174,7 +174,8 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
         super.onDestroy()
         Log.d(TAG, "TrackingActivity Destroyed")
         if(::mSensorManager.isInitialized){ mSensorManager.unregisterListener(this); }
-        //healthSDKManager.disconnect()
+
+        healthSDKManager.disconnect()
 
         healthServicesManager.stopPassiveCallback()
         healthServicesManager.stopPassiveService()
@@ -189,11 +190,11 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
         val offBodyData = offBodyDataFloat?.toInt()
         if (offBodyData == 1){
             Log.d(TAG, "Watch is being worn")
-            //healthSDKManager.resumeAllTrackers()
+            healthSDKManager.resumeAllTrackers()
         } else {
             Log.d(TAG, "Watch is NOT being worn")
             Toast.makeText(this, "Watch removed",Toast.LENGTH_LONG).show()
-            //healthSDKManager.pauseAllTrackers()
+            healthSDKManager.pauseAllTrackers()
         }
     }
 
@@ -206,7 +207,6 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
     private fun startTracking() {
         startOffBodySensor()
         //healthSDKManager.startTracker(HealthTrackerType.ACCELEROMETER_CONTINUOUS)
-        //healthSDKManager.startTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
         healthSDKManager.startTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
         buttontext = "Stop Tracking"
         isTracking = true
@@ -215,12 +215,12 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
     private fun buttonClicked(){
         if(isTracking){
             if(::mSensorManager.isInitialized){ mSensorManager.unregisterListener(this); }
-            //healthSDKManager.pauseAllTrackers()
+            healthSDKManager.pauseAllTrackers()
             buttontext = "Start Tracking"
             isTracking = false
         } else {
             startOffBodySensor()
-            //healthSDKManager.resumeAllTrackers()
+            healthSDKManager.resumeAllTrackers()
             mqtt.mqttConnect(BuildConfig.MQTT_BROKER, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false )
             buttontext = "Stop Tracking"
             isTracking = true
