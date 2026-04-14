@@ -3,6 +3,7 @@ package com.example.MemoriaHomeWatch.presentation
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
 import org.eclipse.paho.client.mqttv3.MqttCallback
@@ -16,22 +17,28 @@ class MQTTManager(
     private val onMessageReceived: (String) -> Unit
 ) {
     private lateinit var mqttClient: MqttClient
+    private lateinit var connOptions: MqttConnectOptions
 
     fun mqttConnect(brokeraddr: String, username: String, password: String, isCleanSession: Boolean) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                connOptions = MqttConnectOptions().apply {
+                    userName = username         // retrieves MQTT_USERNAME from local.properties *see gradle.kts(:app)*
+                    this.password = password.toCharArray() // retrieves MQTT_PASSWORD from local.properties
+
+                    this.isCleanSession = isCleanSession   // (false) -> both the client and server will maintain state across restarts of the client, the server and the connection.
+                    //             Server will keep track of Subscription & QOS if the client, server or connection are restarted.
+                    // (true) -> the client and server will not maintain state across restarts of the client, the server or the connection.
+                    //            Server will not keep track of Subscriptions & QOS cannot be maintained if the client, server or connection are restarted
+                }
+
+                if (::mqttClient.isInitialized && mqttClient.isConnected) {
+                    Log.d("MQTT", "Already connected, skipping.")
+                    return@launch
+                }
+
                 val clientId = MqttClient.generateClientId()
                 mqttClient = MqttClient("tcp://$brokeraddr:1883", clientId, MemoryPersistence())
-
-                val connOptions = MqttConnectOptions()
-
-                connOptions.userName = username         // retrieves MQTT_USERNAME from local.properties *see gradle.kts(:app)*
-                connOptions.password = password.toCharArray() // retrieves MQTT_PASSWORD from local.properties
-
-                connOptions.isCleanSession = isCleanSession   // (false) -> both the client and server will maintain state across restarts of the client, the server and the connection.
-                                                             //             Server will keep track of Subscription & QOS if the client, server or connection are restarted.
-                                                            // (true) -> the client and server will not maintain state across restarts of the client, the server or the connection.
-                                                           //            Server will not keep track of Subscriptions & QOS cannot be maintained if the client, server or connection are restarted
 
                 mqttClient.connect(connOptions)
                 Log.d("MQTT", "Connected!")
@@ -73,7 +80,22 @@ class MQTTManager(
     fun mqttSetReceiveListener() {
         mqttClient.setCallback(object : MqttCallback {
             override fun connectionLost(cause: Throwable) {
-                // Connection Lost
+                Log.e("MQTT", "Connection lost: ${cause.message}")
+                CoroutineScope(Dispatchers.IO).launch {
+                    var attempts = 0
+                    while (!mqttClient.isConnected && attempts < 5) {
+                        attempts++
+                        Log.d("MQTT", "Reconnect attempt $attempts...")
+                        try {
+                            delay(3000L * attempts)
+                            mqttClient.connect(connOptions)
+                            Log.d("MQTT", "Reconnected on attempt $attempts!")
+                        } catch (e: MqttException) {
+                            Log.e("MQTT", "Attempt $attempts failed: ${e.message}")
+                        }
+                    }
+                    if(!mqttClient.isConnected) Log.e("MQTT", "Gave up reconnecting after $attempts attempts, Restart tracking to connect")
+                }
             }
             override fun messageArrived(topic: String, message: MqttMessage) {
                 // A message has been received

@@ -114,9 +114,6 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
                 when (type){
                     HealthTrackerType.HEART_RATE_CONTINUOUS -> {
                         val hrData = data.getValue(ValueKey.HeartRateSet.HEART_RATE)
-
-                        Log.d(TAG, "Sending messages...")
-
                         launch {
                             try {
                                 mqtt.publish("watch-data", hrData.toString(), 1)
