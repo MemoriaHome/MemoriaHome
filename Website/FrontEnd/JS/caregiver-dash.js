@@ -17,7 +17,7 @@ if(token){
 let caregiverData  = null;
 let patientData    = [];
 let currentPatient = null; // The patient whose profile is open (used by webrtc.js)
-
+let latestHeartRate = '--';
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────────────────
 function openTab(tabName) {
@@ -123,7 +123,16 @@ function viewPatient(index) {
       detailRow('Date of Birth', p.date_of_birth ? formatDate(p.date_of_birth) : 'N/A') +
       detailRow('Gender',        p.gender        || 'N/A') +
       detailRow('Address',       p.address       || 'N/A') +
-    '</div>';
+    '</div>' +
+
+    '<div class="detail-card" style="padding:20px 24px;margin-bottom:16px">' +
+      '<h3 style="margin:0 0 12px;font-size:1rem;opacity:0.7">Heart Rate Monitor</h3>' +
+      '<div style="display:flex;align-items:center;gap:16px;margin:8px 0">' +
+        '<span id="hr-value" style="font-size:2.5rem;font-weight:700">--</span>' +
+        '<span style="opacity:0.5">bpm</span>' +
+      '</div>' +
+      '<p id="device-connected" style="margin:12px 0 0;font-size:0.85rem;opacity:0.5">No device connected — real-time data will appear here</p>' +
+    '</div>'
 
   // Medical tab
   document.getElementById('medical').innerHTML =
@@ -211,4 +220,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadDashboard();
   openTab('home');
+
+  const socket = io('https://localhost:3000');
+  socket.on('connect', () => console.log('Socket connected:', socket.id));
+  socket.on('connect_error', (err) => console.error('Socket error:', err.message));
+
+  socket.on('heartrate', (value) => {
+    latestHeartRate = value;
+
+    const hr_element = document.getElementById('hr-value');
+    const device_connection = document.getElementById('device-connected');
+    if (hr_element) hr_element.textContent = value;
+    if (device_connection) device_connection.textContent = "real-time heart rate data from the watch"
+  });
+
 });
