@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
+from arch import arch_model
 
 from dataset import build_dataloaders, NUM_CLASSES, CLASS_NAMES
 from model import FallDetectorCNN
@@ -19,7 +20,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--data_root", default="./data")
     p.add_argument("--epochs", type=int,   default=30)
     p.add_argument("--batch_size", type=int,   default=32)
-    p.add_argument("--lr", type=float, default=3e-4)
+    p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--dropout", type=float, default=0.5)
     p.add_argument("--num_workers", type=int,   default=4)
     p.add_argument("--save_dir", default="./checkpoints")
@@ -115,6 +116,15 @@ def main() -> None:
         num_workers=args.num_workers,
         oversample_train=not args.no_oversample,
     )
+
+    for split in ["train", "val", "test"]:
+        dataset_samples = loaders[split].dataset.samples
+        if len(dataset_samples) > 0:
+            all_labels = [lbl for _, _, lbl in dataset_samples]
+            low, high = min(all_labels), max(all_labels)
+            print(f"[{split.upper()}] Label range: {low} to {high}")
+            if high >= NUM_CLASSES or low < 0:
+                print(f"error: {split} split has labels out of 0-{NUM_CLASSES-1} range")
 
     model = FallDetectorCNN(dropout_rate=args.dropout).to(device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

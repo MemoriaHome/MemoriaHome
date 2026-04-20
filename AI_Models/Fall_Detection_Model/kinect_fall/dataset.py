@@ -11,8 +11,8 @@ from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 import torchvision.transforms as T
 import torchvision.transforms.functional as TF
 
-NUM_CLASSES = 6
-CLASS_NAMES = ["Empty", "Standing", "Sitting", "Lying", "Bending", "Crawling"]
+NUM_CLASSES = 5
+CLASS_NAMES = ["Standing", "Sitting", "Lying", "Bending", "Crawling"]
 IMG_H, IMG_W = 160, 120
 CROP_H, CROP_W = 156, 108
 
@@ -78,7 +78,7 @@ def _collect_samples(root: str, split: str) -> List[Tuple[str, str, int]]:
                 try:
                     serial = int(row[0])
                     cls = int(row[1])
-                    labels[serial] = cls
+                    labels[serial] = cls - 1
                 except ValueError:
                     pass
 
@@ -91,7 +91,7 @@ def _collect_samples(root: str, split: str) -> List[Tuple[str, str, int]]:
             if not depth_path.exists():
                 continue
             label = labels.get(serial, -1)
-            if label == -1:
+            if label == -1: 
                 continue
             if label == 7:
                 label = 0
@@ -174,13 +174,7 @@ class FallDataset(Dataset):
         rgb_path, depth_path, label = self.samples[idx]
 
         rgb = Image.open(rgb_path).convert("RGB")
-        depth = Image.open(depth_path)
-
-        depth_arr = np.array(depth, dtype=np.float32)
-        d_max = depth_arr.max()
-        if d_max > 0:
-            depth_arr = depth_arr / d_max * 255.0
-        depth = Image.fromarray(depth_arr.astype(np.uint8), mode="L")
+        depth = Image.open(depth_path).convert("L")
 
         rgb_t, depth_t = self.joint_tf(rgb, depth)
         rgbd_t = torch.cat([rgb_t, depth_t], dim=0)

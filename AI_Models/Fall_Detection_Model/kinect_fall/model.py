@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-NUM_CLASSES = 6
+NUM_CLASSES = 5
 
 # groups 3 standard ops into one reusable unit
 class ConvBnRelu(nn.Sequential):
