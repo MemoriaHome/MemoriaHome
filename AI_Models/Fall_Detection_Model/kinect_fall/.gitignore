@@ -1,0 +1,21 @@
+# dataset
+data/
+*.csv
+
+# checkpoints
+checkpoints/
+
+# py
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# vs code
+.vscode/
+
+# jupyter
+.ipynb_checkpoints/
+
+# OS
+Thumbs.db
