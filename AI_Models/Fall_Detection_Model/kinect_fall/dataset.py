@@ -11,14 +11,24 @@ from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 import torchvision.transforms as T
 import torchvision.transforms.functional as TF
 
-NUM_CLASSES = 6
-CLASS_NAMES = ["Empty", "Standing", "Sitting", "Lying", "Bending", "Crawling"]
+NUM_CLASSES = 5
+CLASS_NAMES = ["Standing", "Sitting", "Lying", "Bending", "Crawling"]
 IMG_H, IMG_W = 160, 120
 CROP_H, CROP_W = 156, 108
 
 # fallback for compute_dataset_stats (from imagenet)
 MEAN = [0.485, 0.456, 0.406, 0.5]
 STD = [0.229, 0.224, 0.225, 0.25]
+
+LABEL_REMAP = {
+    1: 0,  # standing
+    2: 1,  # sitting
+    3: 2,  # lying
+    4: 3,  # bending
+    5: 4,  # crawling
+    6: -1, # skip empty
+    7: -1, # skip empty
+}
 
 # calculates the means and standard dev of the rgbd dataset for normalization
 def compute_dataset_stats(root: str, split: str = "train", max_samples: int = 2000) -> Tuple[List[float], List[float]]:
@@ -49,8 +59,7 @@ def _collect_samples(root: str, split: str) -> List[Tuple[str, str, int]]:
 
     if not split_dir.exists():
         raise FileNotFoundError(
-            f"Split directory not found: {split_dir}\n"
-            f"Run download_data.py first."
+            f"Split directory not found: {split_dir}"
         )
 
     for folder in sorted(split_dir.iterdir()):
@@ -91,10 +100,9 @@ def _collect_samples(root: str, split: str) -> List[Tuple[str, str, int]]:
             if not depth_path.exists():
                 continue
             label = labels.get(serial, -1)
+            label = LABEL_REMAP.get(label, -1)
             if label == -1:
                 continue
-            if label == 7:
-                label = 0
             samples.append((str(rgb_path), str(depth_path), label))
 
     return samples
@@ -109,7 +117,7 @@ def _build_transforms(split: str, mean: List[float] = MEAN, std:  List[float] = 
 
     return joint, normalize
 
-# here, i used data augmentation to create fake variations of the data
+# used data augmentation to create fake variations of the data
 # by randomly cropping or flipping the image, i'm forcing the model to learn that a person is
 # still a person, even if they aren't perfectly centered
 # i also applied the chnages to both the rgb and depth images the same exact way 
@@ -148,13 +156,13 @@ class _JointTransformEval:
 
 class FallDataset(Dataset):
     def __init__(self, root:  str, split: str = "train", mean:  Optional[List[float]] = None, std:   Optional[List[float]] = None):
-        self.split   = split
+        self.split = split
         self.samples = _collect_samples(root, split)
         if len(self.samples) == 0:
             raise RuntimeError(f"No samples found for split='{split}' under {root}")
 
         mean = mean or MEAN
-        std = std  or STD
+        std = std or STD
         self.joint_tf = _build_transforms(split, mean, std)[0]
         self.normalize = T.Normalize(mean=mean, std=std)
 
@@ -205,12 +213,12 @@ def build_dataloaders(root: str, batch_size: int = 32, num_workers: int = 4, mea
             )
             loaders[split] = DataLoader(
                 ds, batch_size=batch_size, sampler=sampler,
-                num_workers=num_workers, pin_memory=True
+                num_workers=num_workers, pin_memory=torch.cuda.is_available()
             )
         else:
             loaders[split] = DataLoader(
                 ds, batch_size=batch_size, shuffle=False,
-                num_workers=num_workers, pin_memory=True
+                num_workers=num_workers, pin_memory=torch.cuda.is_available()
             )
 
     return loaders

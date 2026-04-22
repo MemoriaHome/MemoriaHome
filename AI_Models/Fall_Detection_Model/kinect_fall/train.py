@@ -13,26 +13,26 @@ from torch.optim.lr_scheduler import OneCycleLR
 from dataset import build_dataloaders, NUM_CLASSES, CLASS_NAMES
 from model import FallDetectorCNN
 
-
+# defining comand line args
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Train fall detection CNN")
     p.add_argument("--data_root", default="./data")
-    p.add_argument("--epochs", type=int,   default=30)
-    p.add_argument("--batch_size", type=int,   default=32)
+    p.add_argument("--epochs", type=int, default=30)
+    p.add_argument("--batch_size", type=int, default=32)
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--dropout", type=float, default=0.5)
-    p.add_argument("--num_workers", type=int,   default=4)
+    p.add_argument("--num_workers", type=int, default=0)
     p.add_argument("--save_dir", default="./checkpoints")
-    p.add_argument("--patience", type=int,   default=7)
+    p.add_argument("--patience", type=int, default=7)
     p.add_argument("--no_oversample", action="store_true")
     p.add_argument("--device", default="")
     return p.parse_args()
 
-
+# takes the models raw ouput and labels then returns the percentage of correct predictions
 def accuracy(preds: torch.Tensor, labels: torch.Tensor) -> float:
     return (preds.argmax(1) == labels).float().mean().item()
 
-
+# calculates what percentage of each class the model correctly identified. this is more for info than accuracy
 def per_class_sensitivity(preds: torch.Tensor, labels: torch.Tensor) -> Dict[int, float]:
     sens = {}
     for c in range(NUM_CLASSES):
@@ -46,8 +46,8 @@ def per_class_sensitivity(preds: torch.Tensor, labels: torch.Tensor) -> Dict[int
 
 def confusion_matrix(preds: torch.Tensor, labels: torch.Tensor) -> np.ndarray:
     cm = np.zeros((NUM_CLASSES, NUM_CLASSES), dtype=np.int64)
-    p  = preds.argmax(1).cpu().numpy()
-    l  = labels.cpu().numpy()
+    p = preds.argmax(1).cpu().numpy()
+    l = labels.cpu().numpy()
     for pi, li in zip(p, l):
         cm[li, pi] += 1
     return cm
@@ -59,8 +59,8 @@ def print_confusion_matrix(cm: np.ndarray) -> None:
     for i, row in enumerate(cm):
         row_str = f"{CLASS_NAMES[i]:12s}" + "".join(f"{v:10d}" for v in row)
         total = row.sum()
-        sens  = cm[i, i] / total if total > 0 else 0.0
-        row_str += f"  sens={sens:.1%}"
+        sens = cm[i, i] / total if total > 0 else 0.0
+        row_str += f"={sens:.1%}"
         print(row_str)
 
 
@@ -116,25 +116,30 @@ def main() -> None:
         oversample_train=not args.no_oversample,
     )
 
+    for split in ["train", "val", "test"]:
+        dataset_samples = loaders[split].dataset.samples
+        if len(dataset_samples) > 0:
+            all_labels = [lbl for _, _, lbl in dataset_samples]
+            low, high = min(all_labels), max(all_labels)
+            print(f"[{split.upper()}] Label range: {low} to {high}")
+            if high >= NUM_CLASSES or low < 0:
+                print(f"error: {split} split has labels out of 0-{NUM_CLASSES-1} range")
+
     model = FallDetectorCNN(dropout_rate=args.dropout).to(device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"FallDetectorCNN: trainable params: {n_params:,}")
 
     # weighted loss for classs imbalance
-    class_weights = loaders["train"].dataset.class_weights().to(device)
-    loss_weights = (1.0 / class_weights.clamp(min=1e-6))
-    loss_weights = loss_weights / loss_weights.sum() * NUM_CLASSES
-    criterion = nn.CrossEntropyLoss(weight=loss_weights)
+    #class_weights = loaders["train"].dataset.class_weights().to(device)
+    #counts = torch.tensor([2082, 1408, 1197, 114, 132], dtype=torch.float32)
+    #weights = 1.0 / torch.sqrt(counts)
+    #weights = weights / weights.sum() * NUM_CLASSES
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     # optimizer and scheduler
     optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    scheduler = OneCycleLR(
-        optimizer,
-        max_lr=args.lr,
-        steps_per_epoch=len(loaders["train"]),
-        epochs=args.epochs,
-        pct_start=0.3,
-    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)
+
 
     save_dir = Path(args.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -149,10 +154,11 @@ def main() -> None:
     for epoch in range(1, args.epochs + 1):
         t0 = time.time()
 
-        tr_loss, tr_acc, _ = run_epoch(model, loaders["train"], criterion, optimizer, scheduler, device, train=True)
+        tr_loss, tr_acc, _ = run_epoch(model, loaders["train"], criterion, optimizer, None,  device, train=True)
         va_loss, va_acc, sens = run_epoch(model, loaders["val"], criterion, None, None, device, train=False)
+        scheduler.step(va_acc)
 
-        lying_sens = sens.get(3, float("nan"))
+        lying_sens = sens.get(2, float("nan"))
         elapsed = time.time() - t0
 
         print(f"{epoch:6d} {tr_loss:12.4f} {tr_acc:10.4f}  "
