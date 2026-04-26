@@ -12,6 +12,9 @@ import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.DataTypeAvailability
 import androidx.health.services.client.data.DeltaDataType
 import androidx.health.services.client.data.PassiveListenerConfig
+import kotlin.math.log
+import kotlin.text.clear
+import kotlin.text.set
 
 class PassiveDataService : PassiveListenerService() {
     override fun onNewDataPointsReceived(dataPoints: DataPointContainer) {
@@ -30,12 +33,16 @@ class HealthServicesManager(
     val healthClient = HealthServices.getClient(context)
     val measureClient = healthClient.measureClient
     private val activeMeasureCallbacks = mutableMapOf<DeltaDataType<*, *>, MeasureCallback>()
+    private val activeDataReceivers = mutableMapOf<DeltaDataType<*, *>, (DataType<*, *>, DataPointContainer) -> Unit>()
+
+    private var isPaused = false
+
     val passiveMonitoringClient = healthClient.passiveMonitoringClient
 
 
     fun startMeasuring(dataType: DeltaDataType<*, *>, dataReceived: (DataType<*, *>, DataPointContainer) -> Unit){
         Log.d(TAG, "Connected to Health client")
-
+        activeDataReceivers[dataType] = dataReceived
         val callback = object : MeasureCallback {
             override fun onAvailabilityChanged(dataType: DeltaDataType<*, *>, availability: Availability) {
                 if (availability is DataTypeAvailability) {
@@ -43,7 +50,7 @@ class HealthServicesManager(
                 }
             }
             override fun onDataReceived(data: DataPointContainer) {
-                dataReceived(dataType, data)
+                if (!isPaused) dataReceived(dataType, data)
             }
         }
         measureClient.registerMeasureCallback(dataType, callback)
@@ -51,12 +58,50 @@ class HealthServicesManager(
     }
 
     fun stopMeasuring(dataType: DeltaDataType<*, *>){
+        activeDataReceivers.remove(dataType)
         activeMeasureCallbacks[dataType]?.let {
             callback ->
             measureClient.unregisterMeasureCallbackAsync(dataType, callback)
             activeMeasureCallbacks.remove(dataType)
             Log.d(TAG, "Stopped measuring ${dataType.name}")
+        } ?: Log.d(TAG, "Tracker ${dataType.name} is not active")
+
+    }
+
+
+    fun pauseAllMeasuring() {
+        isPaused = true
+        activeMeasureCallbacks.forEach { (dataType, callback) ->
+            measureClient.unregisterMeasureCallbackAsync(dataType, callback)
         }
+        activeMeasureCallbacks.clear()
+        Log.d(TAG, "All measuring paused")
+    }
+
+    fun resumeAllMeasuring() {
+        activeDataReceivers.forEach { (dataType, dataReceived) ->
+            val callback = object : MeasureCallback {
+                override fun onAvailabilityChanged(dataType: DeltaDataType<*, *>, availability: Availability) {
+                    if (availability is DataTypeAvailability) {
+                        Log.d(TAG, "Availability changed for ${dataType.name}: $availability")
+                    }
+                }
+                override fun onDataReceived(data: DataPointContainer) {
+                    if (!isPaused) dataReceived(dataType, data)
+                }
+            }
+            measureClient.registerMeasureCallback(dataType, callback)
+            activeMeasureCallbacks[dataType] = callback
+        }
+        isPaused = false
+        Log.d(TAG, "All measuring resumed")
+    }
+
+    fun resetAllMeasuring() {
+        pauseAllMeasuring()
+        activeDataReceivers.clear()
+        isPaused = false
+        Log.d(TAG, "All measuring reset")
     }
 
     // passive monitoring Service's not ready yet

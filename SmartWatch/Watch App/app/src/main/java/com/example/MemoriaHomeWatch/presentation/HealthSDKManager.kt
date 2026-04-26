@@ -114,10 +114,9 @@ class HealthSDKManager (
     }
 
     fun resumeAllTrackers(){   // gets called when the watch is re-added (resumes all registered sensors)
-        activeTrackers.forEach { (type, tracker) ->
-            val listener = activeListeners[type] ?: createListenerForType(type)
-            tracker.setEventListener(listener) }
-        Log.d(TAG, "All trackers resumed")
+        val types = activeTrackers.keys.toList()
+        resetAllTrackers()
+        types.forEach { startTracker(it) }
     }
 
     fun flushTracker(tracker: HealthTrackerType) {   // Flushing data gives collected data instantly.

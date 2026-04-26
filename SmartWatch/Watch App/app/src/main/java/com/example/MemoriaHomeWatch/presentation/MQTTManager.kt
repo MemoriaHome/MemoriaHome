@@ -22,6 +22,11 @@ class MQTTManager(
     fun mqttConnect(brokeraddr: String, username: String, password: String, isCleanSession: Boolean) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                if (::mqttClient.isInitialized && mqttClient.isConnected) {
+                    Log.d("MQTT", "Already connected, skipping.")
+                    return@launch
+                }
+
                 connOptions = MqttConnectOptions().apply {
                     userName = username         // retrieves MQTT_USERNAME from local.properties *see gradle.kts(:app)*
                     this.password = password.toCharArray() // retrieves MQTT_PASSWORD from local.properties
@@ -30,15 +35,19 @@ class MQTTManager(
                     //             Server will keep track of Subscription & QOS if the client, server or connection are restarted.
                     // (true) -> the client and server will not maintain state across restarts of the client, the server or the connection.
                     //            Server will not keep track of Subscriptions & QOS cannot be maintained if the client, server or connection are restarted
+
+                    this.connectionTimeout = 5
                 }
 
-                if (::mqttClient.isInitialized && mqttClient.isConnected) {
-                    Log.d("MQTT", "Already connected, skipping.")
-                    return@launch
+                if (!::mqttClient.isInitialized) {
+                    val clientId = "MemoriaWatch_${android.os.Build.MODEL}" // Consistent ID
+                    mqttClient = MqttClient("tcp://$brokeraddr:1883", clientId, MemoryPersistence())
+                } else if (mqttClient.serverURI != "tcp://$brokeraddr:1883") {
+                    // IP changed, recreate client
+                    if (mqttClient.isConnected) mqttClient.disconnect()
+                    val clientId = "MemoriaWatch_${android.os.Build.MODEL}"
+                    mqttClient = MqttClient("tcp://$brokeraddr:1883", clientId, MemoryPersistence())
                 }
-
-                val clientId = MqttClient.generateClientId()
-                mqttClient = MqttClient("tcp://$brokeraddr:1883", clientId, MemoryPersistence())
 
                 mqttClient.connect(connOptions)
                 Log.d("MQTT", "Connected!")
