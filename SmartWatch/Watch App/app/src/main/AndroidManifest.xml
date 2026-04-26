@@ -1,28 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Remove duplicate WAKE_LOCK -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.BODY_SENSORS"
-        android:maxSdkVersion="35" />
-    <uses-permission android:name="android.permission.BODY_SENSORS_BACKGROUND"
-        android:maxSdkVersion="35" />
+
+    <!-- Body sensors permissions -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.BODY_SENSORS_BACKGROUND" />
+
+    <!-- Health permissions for Android 14+ -->
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
+
+    <!-- Foreground service permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH_BACKGROUND" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
-
+    <!-- Add these missing permissions -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
 
     <uses-feature android:name="android.hardware.type.watch" />
+    <uses-feature android:name="android.hardware.sensor.heartrate" />
 
     <queries>
         <package android:name="com.google.android.wearable.healthservices" />
+        <package android:name="com.samsung.android.service.health" />
     </queries>
 
     <application
@@ -31,40 +39,32 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault">
+
+        <!-- Foreground Service -->
         <service
             android:name=".presentation.ForegroundService"
             android:foregroundServiceType="health"
-            android:exported="false" />
-        <service android:name=".presentation.PassiveDataService"
+            android:exported="false"
+            android:stopWithTask="false" />
+
+        <!-- Passive Data Service for Google Health Services -->
+        <service
+            android:name=".presentation.PassiveDataService"
             android:permission="com.google.android.wearable.healthservices.permission.PASSIVE_DATA_BINDING"
             android:exported="true" />
-        <activity
-            android:name=".presentation.PermissionActivity"
-            android:exported="false"
-            android:label="@string/title_activity_permission"
-            android:taskAffinity="com.example.MemoriaHomeWatch.wear"
-            android:theme="@android:style/Theme.DeviceDefault" />
-        <activity
-            android:name=".presentation.TrackingActivity"
-            android:exported="false"
-            android:label="@string/title_activity_track"
-            android:taskAffinity="com.example.MemoriaHomeWatch.wear"
-            android:theme="@android:style/Theme.DeviceDefault" />
 
-        <uses-library
-            android:name="com.google.android.wearable"
-            android:required="true" />
-        <uses-library
-            android:name="wear-sdk"
-            android:required="false" />
-        <!--
-               Set to true if your app is Standalone, that is, it does not require the handheld
-               app to run.
-        -->
-        <meta-data
-            android:name="com.google.android.wearable.standalone"
-            android:value="true" />
+        <!-- Startup Receiver for boot completion -->
+        <receiver
+            android:name=".presentation.StartupReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
+        <!-- Activities -->
         <activity
             android:name=".presentation.MainActivity"
             android:exported="true"
@@ -72,10 +72,37 @@
             android:theme="@style/MainActivityTheme.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".presentation.PermissionActivity"
+            android:exported="false"
+            android:label="@string/title_activity_permission"
+            android:taskAffinity="com.example.MemoriaHomeWatch.wear"
+            android:theme="@android:style/Theme.DeviceDefault" />
+
+        <activity
+            android:name=".presentation.TrackingActivity"
+            android:exported="false"
+            android:label="@string/title_activity_track"
+            android:taskAffinity="com.example.MemoriaHomeWatch.wear"
+            android:theme="@android:style/Theme.DeviceDefault" />
+
+        <!-- Wearable libraries -->
+        <uses-library
+            android:name="com.google.android.wearable"
+            android:required="true" />
+        <uses-library
+            android:name="wear-sdk"
+            android:required="false" />
+
+        <!-- Standalone app meta-data -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
     </application>
 
 </manifest>

@@ -104,6 +104,22 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
+    // Add to TrackingActivity class
+    private fun startForegroundService() {
+        val intent = Intent(this, ForegroundService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+        Toast.makeText(this, "Background vitals tracking started", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun stopForegroundService() {
+        val intent = Intent(this, ForegroundService::class.java)
+        stopService(intent)
+        Toast.makeText(this, "Background tracking stopped", Toast.LENGTH_SHORT).show()
+    }
 
     // handles data from the HealthSDKManager (Samsung's Health Tracking SDK)
     private fun dataHandleSDK(type: HealthTrackerType, p0: List<DataPoint?>) {
@@ -212,16 +228,21 @@ class TrackingActivity : ComponentActivity(), SensorEventListener {
         isTracking = true
     }
 
-    private fun buttonClicked(){
-        if(isTracking){
-            if(::mSensorManager.isInitialized){ mSensorManager.unregisterListener(this); }
+    // Update buttonClicked() to include service control
+    private fun buttonClicked() {
+        if(isTracking) {
+            // Stop everything
+            if(::mSensorManager.isInitialized) { mSensorManager.unregisterListener(this) }
             healthSDKManager.pauseAllTrackers()
+            stopForegroundService() // Add this
             buttontext = "Start Tracking"
             isTracking = false
         } else {
+            // Start everything
             startOffBodySensor()
             healthSDKManager.resumeAllTrackers()
-            mqtt.mqttConnect(BuildConfig.MQTT_BROKER, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false )
+            startForegroundService() // Add this
+            mqtt.mqttConnect(BuildConfig.MQTT_BROKER, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false)
             buttontext = "Stop Tracking"
             isTracking = true
         }
