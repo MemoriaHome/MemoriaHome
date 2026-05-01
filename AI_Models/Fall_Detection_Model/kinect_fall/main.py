@@ -16,11 +16,11 @@ from pykinect2 import PyKinectRuntime
 import sys
 import datetime
 
-R2_ACCOUNT_ID="b461e36aa853e180dba5bbaf67a2c55e"
-R2_ACCESS_KEY_ID="61abd77512b6cd0f16db9f26c0408487"
-R2_SECRET_ACCESS_KEY="616f3b33b9ff9d0934c2490f2e9d482dcd81952dda601b0cd4705a6d9a76856b"
-R2_BUCKET_NAME="fall-detection"
-R2_PUBLIC_URL="https://pub-5d7658ec5f5f43c6b4231822fd5a5c45.r2.dev"
+R2_ACCOUNT_ID=os.getenv("R2_ACCOUNT_ID")
+R2_ACCESS_KEY_ID=os.getenv("R2_ACCESS_KEY_ID")
+R2_SECRET_ACCESS_KEY=os.getenv("R2_SECRET_ACCESS_KEY")
+R2_BUCKET_NAME=os.getenv("R2_BUCKET_NAME")
+R2_PUBLIC_URL=os.getenv("R2_PUBLIC_URL")
 
 model = YOLO('yolo models/yolov8n-pose.pt')
 
