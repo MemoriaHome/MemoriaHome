@@ -1,4 +1,5 @@
 import os
+import string
 import time
 import cv2
 import numpy as np
@@ -12,18 +13,36 @@ from ultralytics import YOLO
 from pykinect2 import PyKinectV2
 from pykinect2.PyKinectV2 import *
 from pykinect2 import PyKinectRuntime
+import sys
+import datetime
 
-R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID")
-R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
-R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
-R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
-R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL")
+R2_ACCOUNT_ID="b461e36aa853e180dba5bbaf67a2c55e"
+R2_ACCESS_KEY_ID="61abd77512b6cd0f16db9f26c0408487"
+R2_SECRET_ACCESS_KEY="616f3b33b9ff9d0934c2490f2e9d482dcd81952dda601b0cd4705a6d9a76856b"
+R2_BUCKET_NAME="fall-detection"
+R2_PUBLIC_URL="https://pub-5d7658ec5f5f43c6b4231822fd5a5c45.r2.dev"
 
 model = YOLO('yolo models/yolov8n-pose.pt')
 
 kinect = PyKinectRuntime.PyKinectRuntime(
     FrameSourceTypes_Color | FrameSourceTypes_Depth | FrameSourceTypes_Body
 )
+
+try:
+    with open('config.json', 'r') as file: #contains device config values
+        data = json.load(file)
+except FileNotFoundError:
+    sys.exit("[ERROR]Config.json File Not Found...Exiting")
+except json.JSONDecodeError:
+    sys.exit("[ERROR]Config.json File Contains Invalid Json. Check syntax...Exiting")
+
+DEVICE_ID = data['device_id']
+PATIENT_ID = data['patient_id']
+ROOM = data['room']
+BACKEND_URL = data['backend_url']
+RECORDING_PATH = data['recording_path']
+
+print(data)
 
 s3 = boto3.client(
     "s3",
@@ -37,7 +56,7 @@ s3 = boto3.client(
 COLOR_WIDTH, COLOR_HEIGHT = kinect.color_frame_desc.Width, kinect.color_frame_desc.Height
 DEPTH_WIDTH, DEPTH_HEIGHT = kinect.depth_frame_desc.Width, kinect.depth_frame_desc.Height
 MIN_ELAPSED_TIME_THRESHOLD = 10
-VIDEO_FPS = 10
+VIDEO_FPS = 7
 MAX_AFTER_FRAMES = 150
 
 fallen_state = False
@@ -116,6 +135,17 @@ def save_video_clip(event_type="Unknown"):
     global frozen_video_frames_before, video_frames_after
     clip_frames = frozen_video_frames_before + video_frames_after
 
+    Date = datetime.datetime.now().strftime('%Y-%m-%d')
+    Time = datetime.datetime.now().strftime('%H-%M-%S')
+
+    Local_save_path = os.path.join(str(RECORDING_PATH), Date)
+    output_filename = f"Fall{Time}.mp4"
+
+    if not os.path.exists(Local_save_path):
+        os.makedirs(Local_save_path)
+
+    full_path_local_save = os.path.join(Local_save_path, output_filename)
+
     if not clip_frames:
         return
 
@@ -125,11 +155,22 @@ def save_video_clip(event_type="Unknown"):
         temp_file_path = tmp.name
 
     h, w, _ = clip_frames[0].shape
-    out = cv2.VideoWriter(temp_file_path, cv2.VideoWriter_fourcc(*'mp4v'), VIDEO_FPS, (w, h))
+
+    out_local = cv2.VideoWriter(full_path_local_save, cv2.VideoWriter_fourcc(*'mp4v'), VIDEO_FPS, (w, h))
+    print("[LOG] Created out_local")
+    out_cloud = cv2.VideoWriter(temp_file_path, cv2.VideoWriter_fourcc(*'mp4v'), VIDEO_FPS, (w, h))
 
     for frame in clip_frames:
-        out.write(frame)
-    out.release()
+        out_cloud.write(frame)
+    out_cloud.release()
+
+    print("[LOG] Out of Cloud release loop")
+
+    for frame in clip_frames:
+        out_local.write(frame)
+    out_local.release()
+
+    print("[LOG] Out of Local release loop")
 
     upload_clip_to_r2(temp_file_path)
     save_info_in_r2()
