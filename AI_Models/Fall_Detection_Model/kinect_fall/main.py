@@ -1,5 +1,6 @@
+
+
 import os
-import string
 import time
 import cv2
 import numpy as np
@@ -7,26 +8,24 @@ import tempfile
 import boto3
 import io
 import json
+import sys
+import datetime
+import requests
+from threading import Thread
 from copy import deepcopy
 from botocore.config import Config
 from ultralytics import YOLO
 from pykinect2 import PyKinectV2
 from pykinect2.PyKinectV2 import *
 from pykinect2 import PyKinectRuntime
-import sys
-import datetime
 
-R2_ACCOUNT_ID=os.getenv("R2_ACCOUNT_ID")
-R2_ACCESS_KEY_ID=os.getenv("R2_ACCESS_KEY_ID")
-R2_SECRET_ACCESS_KEY=os.getenv("R2_SECRET_ACCESS_KEY")
-R2_BUCKET_NAME=os.getenv("R2_BUCKET_NAME")
-R2_PUBLIC_URL=os.getenv("R2_PUBLIC_URL")
+R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID")
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
+R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
+R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL")
 
 model = YOLO('yolo models/yolov8n-pose.pt')
-
-kinect = PyKinectRuntime.PyKinectRuntime(
-    FrameSourceTypes_Color | FrameSourceTypes_Depth | FrameSourceTypes_Body
-)
 
 try:
     with open('config.json', 'r') as file: #contains device config values
@@ -44,6 +43,10 @@ RECORDING_PATH = data['recording_path']
 
 print(data)
 
+kinect = PyKinectRuntime.PyKinectRuntime(
+    FrameSourceTypes_Color | FrameSourceTypes_Depth | FrameSourceTypes_Body
+)
+
 s3 = boto3.client(
     "s3",
     endpoint_url=f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
@@ -56,7 +59,7 @@ s3 = boto3.client(
 COLOR_WIDTH, COLOR_HEIGHT = kinect.color_frame_desc.Width, kinect.color_frame_desc.Height
 DEPTH_WIDTH, DEPTH_HEIGHT = kinect.depth_frame_desc.Width, kinect.depth_frame_desc.Height
 MIN_ELAPSED_TIME_THRESHOLD = 10
-VIDEO_FPS = 7
+VIDEO_FPS = 10
 MAX_AFTER_FRAMES = 150
 
 fallen_state = False
@@ -118,9 +121,39 @@ def save_info_in_r2():
     except Exception as e:
         print(f"Error uploading JSON: {e}")
 
-def send_api_call():
+def send_api_call(event_type="Unknown"):
     log_file = "fall_incidents.csv"
     file_exists = os.path.isfile(log_file)
+    payload = {
+        "deviceId": DEVICE_ID,
+        "patientId": PATIENT_ID,
+        "room": ROOM,
+        "eventType": event_type,
+        "timestamp": datetime.datetime.now().isoformat(),
+        "videoUrl": f"{R2_PUBLIC_URL}/{video_blob_name}",
+        "incidentName": incident_name
+    }
+
+    def post_with_retry():
+        attempt = 0
+        while True:
+            try:
+                response = requests.post(
+                    f"{BACKEND_URL}/alert/fall",
+                    json=payload,
+                    timeout=10
+                )
+                if response.status_code == 201:
+                    print(f"Alert sent successfully.")
+                    break
+                else:
+                    print(f"Unexpected status {response.status_code}, retrying...")
+            except requests.exceptions.RequestException as e:
+                print(f"Alert attempt {attempt} failed: {e}, retrying in 5s...")
+            attempt += 1
+            time.sleep(5)
+
+    Thread(target=post_with_retry, daemon=True).start()
 
     with open(log_file, "a") as f:
         video_url = f"{R2_PUBLIC_URL}/{video_blob_name}"
@@ -135,14 +168,11 @@ def save_video_clip(event_type="Unknown"):
     global frozen_video_frames_before, video_frames_after
     clip_frames = frozen_video_frames_before + video_frames_after
 
-    Date = datetime.datetime.now().strftime('%Y-%m-%d')
-    Time = datetime.datetime.now().strftime('%H-%M-%S')
+    Date = datetime.date
+    Time = datetime.time
 
-    Local_save_path = os.path.join(str(RECORDING_PATH), Date)
-    output_filename = f"Fall{Time}.mp4"
-
-    if not os.path.exists(Local_save_path):
-        os.makedirs(Local_save_path)
+    Local_save_path = os.path.join(RECORDING_PATH, Date)
+    output_filename = f"Fall_{Time}.mp4"
 
     full_path_local_save = os.path.join(Local_save_path, output_filename)
 
@@ -157,20 +187,15 @@ def save_video_clip(event_type="Unknown"):
     h, w, _ = clip_frames[0].shape
 
     out_local = cv2.VideoWriter(full_path_local_save, cv2.VideoWriter_fourcc(*'mp4v'), VIDEO_FPS, (w, h))
-    print("[LOG] Created out_local")
     out_cloud = cv2.VideoWriter(temp_file_path, cv2.VideoWriter_fourcc(*'mp4v'), VIDEO_FPS, (w, h))
 
     for frame in clip_frames:
         out_cloud.write(frame)
     out_cloud.release()
 
-    print("[LOG] Out of Cloud release loop")
-
     for frame in clip_frames:
         out_local.write(frame)
     out_local.release()
-
-    print("[LOG] Out of Local release loop")
 
     upload_clip_to_r2(temp_file_path)
     save_info_in_r2()
