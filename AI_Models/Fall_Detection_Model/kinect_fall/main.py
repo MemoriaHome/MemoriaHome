@@ -142,7 +142,7 @@ def send_api_call(event_type="Unknown"):
                     f"{BACKEND_URL}/alert/fall",
                     json=payload,
                     timeout=10,
-                    verify= False 
+                    verify = False
                 )
                 if response.status_code == 201:
                     print(f"Alert sent successfully.")
@@ -169,8 +169,8 @@ def save_video_clip(event_type="Unknown"):
     global frozen_video_frames_before, video_frames_after
     clip_frames = frozen_video_frames_before + video_frames_after
 
-    Date = datetime.date
-    Time = datetime.time
+    Date = str(datetime.date)
+    Time = str(datetime.time)
 
     Local_save_path = os.path.join(RECORDING_PATH, Date)
     output_filename = f"Fall_{Time}.mp4"
