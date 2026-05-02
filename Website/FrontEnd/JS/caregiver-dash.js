@@ -16,7 +16,7 @@ if(token){
 // Loaded from API
 let caregiverData  = null;
 let patientData    = [];
-let currentPatient = null; // The patient whose profile is open (used by webrtc.js)
+let currentPatient = null;
 let latestHeartRate = '--';
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────────────────
@@ -160,7 +160,6 @@ function viewPatient(index) {
 }
 
 function closeProfile() {
-  if (typeof disconnectCamera === 'function') disconnectCamera();
   currentPatient = null;
   openTab('patients');
 }
@@ -223,6 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const socket = io('https://localhost:3000');
   socket.on('connect', () => console.log('Socket connected:', socket.id));
+  socket.emit('join-as-caregiver', { caregiverId: CAREGIVER_ID });
   socket.on('connect_error', (err) => console.error('Socket error:', err.message));
 
   socket.on('heartrate', (value) => {
@@ -234,4 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (device_connection) device_connection.textContent = "real-time heart rate data from the watch"
   });
 
+  socket.on('fall-alert', (data) => {
+  console.log('[ALERT] Fall detected:', data);
+  })
 });

@@ -5,8 +5,9 @@ import { AuthModule } from './auth/auth.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CaregiverModule } from './caregiver/caregiver.module'
 import { AdminModule } from './admin/admin.module';
-import { SignalingModule } from './signaling/signaling.module';
+import { GatewayModule } from './signaling/signaling.module';
 import { MqttModule } from './mqtt/mqtt.module';
+import { AlertModule } from './alert/alert.module';
 
 @Module({
   imports: [TypeOrmModule.forRoot({
@@ -22,8 +23,9 @@ import { MqttModule } from './mqtt/mqtt.module';
     CaregiverModule,
     AuthModule,
     AdminModule,
-    SignalingModule,
+    GatewayModule,
     MqttModule,
+    AlertModule,
   ],
   controllers: [AppController],
   providers: [AppService],

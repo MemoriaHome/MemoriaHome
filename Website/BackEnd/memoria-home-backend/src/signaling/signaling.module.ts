@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
-import { WebrtcGateway } from './signaling.gateway';
-import { DeviceRegistryService } from './device-registry.service';
+import { AppGateway } from './signaling.gateway';
 
 @Module({
-  providers: [WebrtcGateway, DeviceRegistryService],
-  exports: [DeviceRegistryService, ], // export so other modules (e.g. caregiver) can query devices
+  providers: [AppGateway],
+  exports: [AppGateway],
 })
-export class SignalingModule {}
+export class GatewayModule {}
