@@ -141,7 +141,8 @@ def send_api_call(event_type="Unknown"):
                 response = requests.post(
                     f"{BACKEND_URL}/alert/fall",
                     json=payload,
-                    timeout=10
+                    timeout=10,
+                    verify= False 
                 )
                 if response.status_code == 201:
                     print(f"Alert sent successfully.")
