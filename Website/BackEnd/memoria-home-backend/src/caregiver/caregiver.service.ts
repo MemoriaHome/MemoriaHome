@@ -53,4 +53,11 @@ export class CaregiverService {
     };
   }
 
+  async getCaregiverIdByPatient(patientId: number): Promise<number | null> {
+  const assignment = await this.patientCaregiverRepo.findOne({
+    where: { patient_id: patientId },
+  });
+  return assignment ? assignment.caregiver_id : null;
+}
+
 }
