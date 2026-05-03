@@ -1,5 +1,3 @@
-
-
 import os
 import time
 import cv2
@@ -188,8 +186,9 @@ def save_video_clip(event_type="Unknown"):
     h, w, _ = clip_frames[0].shape
 
     out_local = cv2.VideoWriter(full_path_local_save, cv2.VideoWriter_fourcc(*'mp4v'), VIDEO_FPS, (w, h))
+    print("[LOG] Finalized Local Copy")
     out_cloud = cv2.VideoWriter(temp_file_path, cv2.VideoWriter_fourcc(*'mp4v'), VIDEO_FPS, (w, h))
-
+    print("[LOG] Finalized Cloud Copy")
     for frame in clip_frames:
         out_cloud.write(frame)
     out_cloud.release()
