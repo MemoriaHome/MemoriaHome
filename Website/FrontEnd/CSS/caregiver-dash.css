@@ -602,3 +602,61 @@ body {
   cursor: pointer;
 }
 .cam-device-btn:hover { background: var(--mint-card); }
+
+#fall-alert-banner {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  align-items: flex-start;
+}
+
+#fall-alert-card {
+  background: #fff;
+  border-left: 5px solid #e53e3e;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  padding: 16px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 300px;
+  max-width: 400px;
+}
+
+#fall-alert-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+#fall-alert-body {
+  flex: 1;
+}
+
+#fall-alert-title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #e53e3e;
+  margin-bottom: 6px;
+}
+
+#fall-alert-details {
+  font-size: 0.85rem;
+  color: #555;
+  line-height: 1.5;
+}
+
+#fall-alert-dismiss {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #aaa;
+  padding: 0;
+  line-height: 1;
+}
+
+#fall-alert-dismiss:hover {
+  color: #333;
+}

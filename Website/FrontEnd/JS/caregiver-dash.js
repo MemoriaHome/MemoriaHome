@@ -221,8 +221,10 @@ document.addEventListener('DOMContentLoaded', () => {
   openTab('home');
 
   const socket = io('https://localhost:3000');
-  socket.on('connect', () => console.log('Socket connected:', socket.id));
+  socket.on('connect', () => {
+  console.log('Socket connected:', socket.id);
   socket.emit('join-as-caregiver', { caregiverId: CAREGIVER_ID });
+});
   socket.on('connect_error', (err) => console.error('Socket error:', err.message));
 
   socket.on('heartrate', (value) => {
@@ -236,5 +238,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   socket.on('fall-alert', (data) => {
   console.log('[ALERT] Fall detected:', data);
-  })
-});
+
+  const banner = document.getElementById('fall-alert-banner');
+  const details = document.getElementById('fall-alert-details');
+
+  details.innerHTML =
+  'Patient: <strong>' + data.patientName + '</strong><br>' +
+  'Room: <strong>' + data.room + '</strong> · ' +
+  'Type: <strong>' + data.eventType + '</strong> · ' +
+  new Date(data.timestamp).toLocaleTimeString();
+
+  banner.style.display = 'flex';
+})})
+
+function dismissAlert() {
+  document.getElementById('fall-alert-banner').style.display = 'none';
+}

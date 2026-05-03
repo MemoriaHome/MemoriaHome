@@ -53,11 +53,11 @@ export class CaregiverService {
     };
   }
 
-  async getCaregiverIdByPatient(patientId: number): Promise<number | null> {
-  const assignment = await this.patientCaregiverRepo.findOne({
+  async getCaregiverIdsByPatient(patientId: number): Promise<number[]> {
+  const assignments = await this.patientCaregiverRepo.find({
     where: { patient_id: patientId },
   });
-  return assignment ? assignment.caregiver_id : null;
+  return assignments.map(a => a.caregiver_id);
 }
 
 }
