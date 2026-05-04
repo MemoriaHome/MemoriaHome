@@ -28,11 +28,11 @@ class FallDetectionModule(BaseModule):
     FLOOR_FALLEN_THRESHOLD    = 0.4
     FLOOR_RECOVERED_THRESHOLD = 0.6
 
-    def __init__(self, frame_queue: queue.Queue, config: Config, annotated_queue: queue.Queue = None):
+    def __init__(self, frame_queue: queue.Queue, config: Config, annotated_queue: queue.Queue = None, command_queue: queue.Queue = None):
         super().__init__(frame_queue)
         self._config = config
         self._annotated_queue = annotated_queue  # optional — display module reads from this
-
+        self._command_queue = command_queue
         self._model = YOLO('yolo models/yolov8n-pose.pt')
 
         self._s3 = boto3.client(
@@ -60,6 +60,7 @@ class FallDetectionModule(BaseModule):
     # --- Core frame processing ---
 
     def _process_frame(self, frame) -> None:
+        self._handle_commands()
         color = frame.color
         if color is None:
             return
@@ -259,3 +260,20 @@ class FallDetectionModule(BaseModule):
                     f"{self._incident_name},"
                     f"{self._r2_public_url}/{self._video_blob_name}\n")
         print(f"Incident logged locally to {log_file}")
+
+    def _handle_commands(self):
+        try:
+            while True:
+                cmd = self._command_queue.get_nowait()
+                if cmd == "simulate_fall" and not self._fallen_state:
+                    print("[SIM] Fall simulated via keypress")
+                    self._fallen_state               = True
+                    self._fall_start_time            = time.time()
+                    self._taking_video               = True
+                    self._frozen_video_frames_before = list(self._video_frames_before)
+                elif cmd == "simulate_recovery":
+                    print("[SIM] Recovery simulated via keypress")
+                    self._save_video_clip(event_type="Recovered Fall")
+                    self._reset_fall_state()
+        except queue.Empty:
+         pass

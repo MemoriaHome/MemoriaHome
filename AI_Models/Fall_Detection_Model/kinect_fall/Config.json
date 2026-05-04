@@ -3,5 +3,5 @@
   "patient_id": "3",
   "room": "Living Room",
   "backend_url": "https://localhost:3000",
-  "recording_path": "C:\\Users\\lenovo\\OneDrive\\Documents\\GitHub\\MemoriaHome\\AI_Models\\Fall_Detection_Model\\kinect_fall"
+  "recording_path": "C:\\MyGit\\MemoriaHome\\AI_Models\\Fall_Detection_Model\\kinect_fall\\Recordings"
 }

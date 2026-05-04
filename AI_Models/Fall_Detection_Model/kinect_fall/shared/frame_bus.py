@@ -1,6 +1,8 @@
 import queue
 from typing import List
 
+command_queue = queue.Queue() ##command q so we dont have to fall all the damn time
+
 
 class FrameBus:
     """
