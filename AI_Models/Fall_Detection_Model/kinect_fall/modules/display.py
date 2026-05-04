@@ -9,6 +9,7 @@ class DisplayModule(BaseModule):
         super().__init__(frame_queue)
         self._window_name = window_name
         self._command_queue = command_queue
+        
 
     def _process_frame(self, frame) -> None:
         display = cv2.resize(frame, (960, 540))
