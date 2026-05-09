@@ -7,8 +7,10 @@ import { PatientCaregiver } from '../entities/patientToCaregiver.entity';
 import { Patient } from '../entities/patient.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Caregiver, PatientCaregiver, Patient])],
-  exports: [TypeOrmModule],
+  imports: [
+    TypeOrmModule.forFeature([Caregiver, PatientCaregiver, Patient]),
+  ],
+  exports: [TypeOrmModule, CaregiverService],
   controllers: [CaregiverController],
   providers: [CaregiverService],
 })

@@ -58,6 +58,6 @@ export class CaregiverService {
     where: { patient_id: patientId },
   });
   return assignments.map(a => a.caregiver_id);
-}
+  }
 
 }

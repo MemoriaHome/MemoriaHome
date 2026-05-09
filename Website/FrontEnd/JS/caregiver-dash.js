@@ -19,6 +19,10 @@ let patientData    = [];
 let currentPatient = null;
 let latestHeartRate = '--';
 
+// ── ALERTS STATE ──────────────────────────────────────────────────────────────
+let allAlerts   = [];   // populated by pushAlert() / future API load
+let alertFilter = 'all';
+
 // ── TAB SWITCHING ─────────────────────────────────────────────────────────────
 function openTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -207,6 +211,148 @@ function infoRow(label, value) {
 }
 
 
+// ── ALERTS ────────────────────────────────────────────────────────────────────
+
+/** Called whenever a new alert arrives (Socket.IO) or the page loads saved alerts */
+function pushAlert(payload) {
+  allAlerts.unshift({ ...payload, unread: true }); // newest first
+  renderAlertCards();
+}
+
+function filterAlerts(type, btn) {
+  alertFilter = type;
+  document.querySelectorAll('.alerts-filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderAlertCards();
+}
+
+function renderAlertCards() {
+  const list  = document.getElementById('alert-card-list');
+  const label = document.getElementById('alerts-count-label');
+  const badge = document.getElementById('alerts-nav-badge');
+  if (!list) return;
+
+  const visible = allAlerts.filter(a => {
+    if (alertFilter === 'unread')   return a.unread;
+    if (alertFilter === 'critical') return a.severity === 'critical';
+    return true;
+  });
+
+  const unreadCount = allAlerts.filter(a => a.unread).length;
+  badge.style.display = unreadCount ? 'flex' : 'none';
+  badge.textContent   = unreadCount;
+
+  // Update the home-tab alert stat tile
+  const statAlertEl = document.querySelector('.stat-tile--alert .stat-num');
+  if (statAlertEl) statAlertEl.textContent = unreadCount || allAlerts.length;
+
+  if (!visible.length) {
+    list.innerHTML = `
+      <div class="alerts-empty">
+        <div class="alerts-empty__icon">🔕</div>
+        <div class="alerts-empty__text">No alerts to show</div>
+      </div>`;
+    if (label) label.textContent = '';
+    return;
+  }
+
+  if (label) label.textContent = `${visible.length} alert${visible.length !== 1 ? 's' : ''}`;
+
+  list.innerHTML = visible.map(a => `
+    <div class="alert-card severity--${a.severity || 'critical'} ${a.unread ? 'unread' : ''}"
+         data-id="${a.alertId}">
+      <div class="alert-card__bar"></div>
+      <div class="alert-card__body">
+        <span class="alert-card__icon">${(a.severity === 'warning') ? '⚠️' : '🚨'}</span>
+        <div class="alert-card__info">
+          <div class="alert-card__header">
+            <span class="alert-card__patient">${a.patientName || 'Unknown Patient'}</span>
+            <span class="alert-card__type-tag">${(a.eventType || a.type || 'fall detected').replace(/_/g, ' ')}</span>
+            <span class="alert-card__unread-dot"></span>
+          </div>
+          <div class="alert-card__desc">Room: ${a.room || '—'}</div>
+          <div class="alert-card__meta">${formatAlertTime(a.timestamp)}</div>
+        </div>
+      </div>
+      <div class="alert-card__actions">
+        <button class="alert-view-btn"
+          ${a.videoUrl ? '' : 'disabled'}
+          onclick="openVideoModal('${a.alertId}')">
+          ${a.videoUrl ? '▶ View Recording' : 'No Recording'}
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+function formatAlertTime(ts) {
+  if (!ts) return '—';
+  const d    = new Date(ts);
+  const diff = Math.floor((Date.now() - d) / 1000);
+  if (diff < 60)    return 'Just now';
+  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+
+// ── VIDEO MODAL ───────────────────────────────────────────────────────────────
+
+function openVideoModal(alertId) {
+  const a = allAlerts.find(x => x.alertId === alertId);
+  if (!a || !a.videoUrl) return;
+
+  // Mark as read and re-render cards
+  a.unread = false;
+  renderAlertCards();
+
+  const overlay  = document.getElementById('video-modal-overlay');
+  const player   = document.getElementById('vmodal-player');
+  const status   = document.getElementById('vmodal-status');
+  const download = document.getElementById('vmodal-download');
+
+  document.getElementById('vmodal-patient').textContent  = a.patientName || 'Unknown Patient';
+  document.getElementById('vmodal-subtitle').textContent =
+    `${(a.eventType || a.type || 'Fall detected').replace(/_/g, ' ')} · ${formatAlertTime(a.timestamp)}`;
+  document.getElementById('vmodal-info').innerHTML =
+    `<strong>Room:</strong> ${a.room || '—'} &nbsp;|&nbsp;
+     <strong>Time:</strong> ${a.timestamp ? new Date(a.timestamp).toLocaleString() : '—'}`;
+
+  download.href     = a.videoUrl;
+  download.download = `incident_${alertId}.mp4`;
+
+  // Show loading status, hide when video is ready
+  status.classList.remove('hidden');
+  player.addEventListener('canplay', () => status.classList.add('hidden'), { once: true });
+  player.addEventListener('error',   () => {
+    document.getElementById('vmodal-status-text').textContent = 'Could not load recording.';
+    document.getElementById('vmodal-status').querySelector('.video-modal__status-icon').textContent = '⚠️';
+  }, { once: true });
+
+  player.src = a.videoUrl;
+  player.load();
+
+  overlay.classList.remove('hidden');
+}
+
+function closeVideoModal() {
+  const overlay = document.getElementById('video-modal-overlay');
+  const player  = document.getElementById('vmodal-player');
+  overlay.classList.add('hidden');
+  player.pause();
+  player.src = '';
+}
+
+// Close on backdrop click
+document.getElementById('video-modal-overlay')?.addEventListener('click', function(e) {
+  if (e.target === this) closeVideoModal();
+});
+
+// Close on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeVideoModal();
+});
+
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // Set today's date on home tab
@@ -239,14 +385,26 @@ document.addEventListener('DOMContentLoaded', () => {
   socket.on('fall-alert', (data) => {
   console.log('[ALERT] Fall detected:', data);
 
-  const banner = document.getElementById('fall-alert-banner');
+  // Add to the alerts tab list
+  pushAlert({
+    alertId:   data.alertId || ('alert-' + Date.now()),
+    patientName: data.patientName,
+    eventType: data.eventType,
+    room:      data.room,
+    timestamp: data.timestamp,
+    videoUrl:  data.videoUrl || null,
+    severity:  'critical'
+  });
+
+  // Show the toast banner
+  const banner  = document.getElementById('fall-alert-banner');
   const details = document.getElementById('fall-alert-details');
 
   details.innerHTML =
-  'Patient: <strong>' + data.patientName + '</strong><br>' +
-  'Room: <strong>' + data.room + '</strong> · ' +
-  'Type: <strong>' + data.eventType + '</strong> · ' +
-  new Date(data.timestamp).toLocaleTimeString();
+    'Patient: <strong>' + data.patientName + '</strong><br>' +
+    'Room: <strong>' + data.room + '</strong> · ' +
+    'Type: <strong>' + data.eventType + '</strong> · ' +
+    new Date(data.timestamp).toLocaleTimeString();
 
   banner.style.display = 'flex';
 })})

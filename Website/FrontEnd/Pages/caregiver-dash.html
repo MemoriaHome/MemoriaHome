@@ -28,6 +28,11 @@
         <span class="nav-ico">👤</span>
         <span class="nav-lbl">Account</span>
       </button>
+      <button class="nav-btn" id="btn-alerts" onclick="openTab('alerts')">
+        <span class="nav-ico">🔔</span>
+        <span class="nav-lbl">Alerts</span>
+        <span class="nav-badge" id="alerts-nav-badge" style="display:none">0</span>
+      </button>
       <button class="nav-btn" id="btn-settings" onclick="openTab('settings')">
         <span class="nav-ico">⚙️</span>
         <span class="nav-lbl">Settings</span>
@@ -112,7 +117,7 @@
         <div class="quick-card" onclick="openTab('patients')">
           <span class="quick-icon">👥</span><span class="quick-lbl">My Patients</span>
         </div>
-        <div class="quick-card quick-card--alert">
+        <div class="quick-card quick-card--alert" onclick="openTab('alerts')" style="cursor:pointer">
           <span class="quick-icon">⚠️</span><span class="quick-lbl">Alerts</span>
           <span class="quick-badge">2</span>
         </div>
@@ -207,6 +212,29 @@
     </div>
 
 
+    <!-- ALERTS TAB -->
+    <div id="alerts" class="tab-content">
+      <div class="page-header">
+        <h2>Alerts</h2>
+        <p class="subtitle">Incident history for your assigned patients</p>
+      </div>
+
+      <div class="alerts-toolbar">
+        <button class="alerts-filter-btn active" onclick="filterAlerts('all', this)">All</button>
+        <button class="alerts-filter-btn" onclick="filterAlerts('unread', this)">Unread</button>
+        <button class="alerts-filter-btn" onclick="filterAlerts('critical', this)">Critical</button>
+        <span class="alerts-count" id="alerts-count-label"></span>
+      </div>
+
+      <div class="alert-card-list" id="alert-card-list">
+        <div class="alerts-empty">
+          <div class="alerts-empty__icon">🔕</div>
+          <div class="alerts-empty__text">No alerts yet</div>
+        </div>
+      </div>
+    </div>
+
+
     <!-- ACCOUNT TAB -->
     <div id="account" class="tab-content">
       <div class="page-header"><h2>My Profile</h2></div>
@@ -236,6 +264,38 @@
     </div>
 
   </main>
+
+  <!-- VIDEO PLAYER MODAL -->
+  <div class="video-modal-overlay hidden" id="video-modal-overlay">
+    <div class="video-modal" role="dialog" aria-modal="true">
+
+      <div class="video-modal__header">
+        <span class="video-modal__header-icon">🎥</span>
+        <div class="video-modal__title">
+          <div class="video-modal__patient" id="vmodal-patient">—</div>
+          <div class="video-modal__subtitle" id="vmodal-subtitle">—</div>
+        </div>
+        <button class="video-modal__close" onclick="closeVideoModal()" aria-label="Close">✕</button>
+      </div>
+
+      <div class="video-modal__body">
+        <video class="video-modal__player" id="vmodal-player"
+               controls preload="metadata">
+          Your browser does not support HTML5 video.
+        </video>
+        <div class="video-modal__status" id="vmodal-status">
+          <span class="video-modal__status-icon">⏳</span>
+          <span id="vmodal-status-text">Loading recording…</span>
+        </div>
+      </div>
+
+      <div class="video-modal__footer">
+        <div class="video-modal__alert-info" id="vmodal-info">—</div>
+        <a class="video-modal__download" id="vmodal-download" href="#" download>⬇ Download clip</a>
+      </div>
+
+    </div>
+  </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="../JS/caregiver-dash.js"></script>

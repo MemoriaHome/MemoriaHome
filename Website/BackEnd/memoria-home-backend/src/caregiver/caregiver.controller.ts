@@ -6,7 +6,9 @@ import { UpdateCaregiverDto } from './dto/update-caregiver.dto';
 @Controller('caregiver')
 export class CaregiverController {
 
-  constructor(private readonly caregiverService: CaregiverService) {}
+  constructor(
+    private readonly caregiverService: CaregiverService,
+  ) {}
 
   @Post()
   create(@Body() createCaregiverDto: CreateCaregiverDto) {
@@ -38,5 +40,4 @@ export class CaregiverController {
   remove(@Param('id') id: string) {
     return this.caregiverService.remove(+id);
   }
-
 }
