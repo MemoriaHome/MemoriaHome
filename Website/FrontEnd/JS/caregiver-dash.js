@@ -298,7 +298,7 @@ function formatAlertTime(ts) {
 // ── VIDEO MODAL ───────────────────────────────────────────────────────────────
 
 function openVideoModal(alertId) {
-  const a = allAlerts.find(x => x.alertId === alertId);
+  const a = allAlerts.find(x => String(x.alertId) === String(alertId));
   if (!a || !a.videoUrl) return;
 
   // Mark as read and re-render cards
