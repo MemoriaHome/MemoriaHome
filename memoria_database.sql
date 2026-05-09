@@ -101,3 +101,29 @@ CREATE TABLE fall_detections (
  
 CREATE INDEX idx_falls_patient ON fall_detections(patient_id);
 CREATE INDEX idx_falls_timestamp ON fall_detections(timestamp DESC);
+
+CREATE TABLE alerts (
+    alert_id SERIAL PRIMARY KEY,
+    event VARCHAR(100) NOT NULL,
+    escalated BOOLEAN DEFAULT FALSE,
+    from_device VARCHAR(100),
+    room VARCHAR(100),
+    video_url TEXT,
+    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_alerts_timestamp ON alerts(timestamp DESC);
+CREATE INDEX idx_alerts_event ON alerts(event);
+
+CREATE TABLE patient_alerts (
+    patient_alert_id SERIAL PRIMARY KEY,
+    patient_id INTEGER NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    alert_id INTEGER NOT NULL REFERENCES alerts(alert_id) ON DELETE CASCADE,
+    acknowledged BOOLEAN DEFAULT FALSE,
+    acknowledged_at TIMESTAMP,
+    acknowledged_by INTEGER REFERENCES users(user_id),
+    UNIQUE(patient_id, alert_id)
+);
+
+CREATE INDEX idx_patient_alerts_patient ON patient_alerts(patient_id);
+CREATE INDEX idx_patient_alerts_alert ON patient_alerts(alert_id);
