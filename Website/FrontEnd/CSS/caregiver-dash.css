@@ -1030,3 +1030,126 @@ body {
 }
 
 .video-modal__download:hover { background: var(--mint-bg); }
+
+/* ════════════════════════════════════════════════
+   ACKNOWLEDGE BUTTON + RESOLVED SECTION
+   ════════════════════════════════════════════════ */
+
+/* Acknowledge button — primary action on active cards */
+.alert-ack-btn {
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  background: var(--teal-dark);
+  color: var(--white);
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.alert-ack-btn:hover { background: var(--teal-mid); }
+
+/* View Recording on active cards — secondary style */
+.alert-view-btn.secondary {
+  background: transparent;
+  color: var(--teal-dark);
+  border: 1px solid var(--teal-soft);
+}
+
+.alert-view-btn.secondary:hover { background: var(--mint-bg); }
+
+/* Escalated badge on a card */
+.alert-card__escalated-tag {
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: #fff0e6;
+  color: #c45c00;
+  border: 1px solid #f5c89a;
+}
+
+/* ── Resolved section ───────────────────────────── */
+
+.resolved-section {
+  margin-top: 32px;
+}
+
+.resolved-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  padding: 10px 0;
+  border-top: 1px solid var(--mint-card);
+}
+
+.resolved-toggle__label {
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--text-muted);
+}
+
+.resolved-toggle__count {
+  font-size: 12px;
+  background: var(--mint-card);
+  color: var(--text-muted);
+  padding: 2px 10px;
+  border-radius: 20px;
+}
+
+.resolved-toggle__chevron {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+
+.resolved-toggle__chevron.open { transform: rotate(180deg); }
+
+.resolved-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.resolved-list.hidden { display: none; }
+
+/* Resolved alert card — muted, greyed out */
+.alert-card--resolved {
+  opacity: 0.65;
+  background: var(--mint-bg);
+  border-color: var(--mint-card);
+}
+
+.alert-card--resolved .alert-card__bar {
+  background: #b0c9c9;
+}
+
+.alert-card--resolved:hover {
+  opacity: 0.85;
+  border-color: var(--teal-soft);
+}
+
+.alert-card__resolved-tag {
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: #e6f4f1;
+  color: var(--teal-dark);
+}
+
+.alert-card__ack-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}

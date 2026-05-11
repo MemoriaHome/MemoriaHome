@@ -60,4 +60,16 @@ export class CaregiverService {
   return assignments.map(a => a.caregiver_id);
   }
 
+  async getPatientIdsByCaregiver(caregiverId: number): Promise<number[]> {
+    const assignments = await this.patientCaregiverRepo.find({
+      where: { caregiver_id: caregiverId },
+    });
+    return assignments.map(a => a.patient_id);
+  }
+
+  async getUserIdByCaregiver(caregiverId: number): Promise<number | null> {
+    const caregiver = await this.caregiverRepo.findOneBy({ caregiver_id: caregiverId });
+    return caregiver?.user_id ?? null;
+  }
+
 }

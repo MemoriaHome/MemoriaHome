@@ -1,4 +1,4 @@
-// ── CONFIG ───────────────────────────────────────────────────────────────────
+// ── CONFIG ────────────────────────────────────────────────────────────────────
 const API_BASE = 'https://localhost:3000';
 
 const token = localStorage.getItem("access_token");
@@ -20,8 +20,10 @@ let currentPatient = null;
 let latestHeartRate = '--';
 
 // ── ALERTS STATE ──────────────────────────────────────────────────────────────
-let allAlerts   = [];   // populated by pushAlert() / future API load
-let alertFilter = 'all';
+let allAlerts      = [];   // active (unacknowledged)
+let resolvedAlerts = [];   // acknowledged
+let alertFilter    = 'all';
+let resolvedOpen   = false;
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────────────────
 function openTab(tabName) {
@@ -51,7 +53,6 @@ async function loadDashboard() {
     renderPatientList();
     renderAccountCard();
 
-    // Update home stat
     const statEl = document.getElementById('stat-patients');
     if (statEl) statEl.textContent = patientData.length;
 
@@ -59,6 +60,32 @@ async function loadDashboard() {
     console.error('Failed to load dashboard:', error);
     document.getElementById('patient-list').innerHTML =
       '<p class="error-msg">Could not load patients. Make sure the server is running.</p>';
+  }
+}
+
+
+// ── LOAD ALERTS FROM API (page load seed) ─────────────────────────────────────
+async function loadAlerts() {
+  try {
+    const res  = await fetch(`${API_BASE}/alert/caregiver/${CAREGIVER_ID}`);
+    if (!res.ok) return;
+    const data = await res.json();
+
+    allAlerts      = [];
+    resolvedAlerts = [];
+
+    data.forEach(a => {
+      if (a.acknowledged) {
+        resolvedAlerts.push({ ...a, unread: false });
+      } else {
+        allAlerts.push({ ...a, unread: false });
+      }
+    });
+
+    renderAlertCards();
+    renderResolvedSection();
+  } catch (err) {
+    console.error('[ALERTS] Failed to load alerts:', err);
   }
 }
 
@@ -113,7 +140,7 @@ function renderPatientList() {
 // ── VIEW PATIENT PROFILE ──────────────────────────────────────────────────────
 function viewPatient(index) {
   const p = patientData[index];
-  currentPatient = p; // expose to webrtc.js
+  currentPatient = p;
 
   document.getElementById('profile-avatar').textContent = getInitials(p.first_name, p.last_name);
   document.getElementById('profile-name').textContent   = p.first_name + ' ' + p.last_name;
@@ -121,7 +148,6 @@ function viewPatient(index) {
   const stageBadge = document.getElementById('profile-stage-badge');
   stageBadge.textContent = p.dementia_stage || 'Stage Unknown';
 
-  // Overview tab
   document.getElementById('overview').innerHTML =
     '<div class="detail-card">' +
       detailRow('Date of Birth', p.date_of_birth ? formatDate(p.date_of_birth) : 'N/A') +
@@ -138,27 +164,23 @@ function viewPatient(index) {
       '<p id="device-connected" style="margin:12px 0 0;font-size:0.85rem;opacity:0.5">No device connected — real-time data will appear here</p>' +
     '</div>'
 
-  // Medical tab
   document.getElementById('medical').innerHTML =
     '<div class="detail-card">' +
       detailRow('Dementia Stage',  p.dementia_stage  || 'N/A') +
       detailRow('Medical History', p.medical_history ? JSON.stringify(p.medical_history) : 'None recorded') +
     '</div>';
 
-  // Contact tab
   document.getElementById('contact').innerHTML =
     '<div class="detail-card">' +
       detailRow('Emergency Contact',      p.emergency_contact      || 'N/A') +
       detailRow('Emergency Contact Name', p.emergency_contact_name || 'N/A') +
     '</div>';
 
-  // Reset sub-tabs to overview
   document.querySelectorAll('.ptab-btn').forEach(b => b.classList.remove('active-ptab'));
   document.querySelectorAll('.profile-section').forEach(s => s.classList.remove('active-psection'));
   document.querySelector('.ptab-btn').classList.add('active-ptab');
   document.getElementById('overview').classList.add('active-psection');
 
-  // Switch tab
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.getElementById('patient-profile').classList.add('active');
 }
@@ -213,10 +235,11 @@ function infoRow(label, value) {
 
 // ── ALERTS ────────────────────────────────────────────────────────────────────
 
-/** Called whenever a new alert arrives (Socket.IO) or the page loads saved alerts */
+// Called on incoming Socket.IO event — always active (unacknowledged)
 function pushAlert(payload) {
-  allAlerts.unshift({ ...payload, unread: true }); // newest first
+  allAlerts.unshift({ ...payload, unread: true });
   renderAlertCards();
+  renderResolvedSection();
 }
 
 function filterAlerts(type, btn) {
@@ -242,32 +265,32 @@ function renderAlertCards() {
   badge.style.display = unreadCount ? 'flex' : 'none';
   badge.textContent   = unreadCount;
 
-  // Update the home-tab alert stat tile
   const statAlertEl = document.querySelector('.stat-tile--alert .stat-num');
   if (statAlertEl) statAlertEl.textContent = unreadCount || allAlerts.length;
+
+  if (label) label.textContent = visible.length
+    ? `${visible.length} active alert${visible.length !== 1 ? 's' : ''}`
+    : '';
 
   if (!visible.length) {
     list.innerHTML = `
       <div class="alerts-empty">
-        <div class="alerts-empty__icon">🔕</div>
-        <div class="alerts-empty__text">No alerts to show</div>
+        <div class="alerts-empty__icon">✅</div>
+        <div class="alerts-empty__text">No active alerts</div>
       </div>`;
-    if (label) label.textContent = '';
     return;
   }
-
-  if (label) label.textContent = `${visible.length} alert${visible.length !== 1 ? 's' : ''}`;
 
   list.innerHTML = visible.map(a => `
     <div class="alert-card severity--${a.severity || 'critical'} ${a.unread ? 'unread' : ''}"
          data-id="${a.alertId}">
       <div class="alert-card__bar"></div>
       <div class="alert-card__body">
-        <span class="alert-card__icon">${(a.severity === 'warning') ? '⚠️' : '🚨'}</span>
+        <span class="alert-card__icon">🚨</span>
         <div class="alert-card__info">
           <div class="alert-card__header">
-            <span class="alert-card__patient">${a.patientName || 'Unknown Patient'}</span>
-            <span class="alert-card__type-tag">${(a.eventType || a.type || 'fall detected').replace(/_/g, ' ')}</span>
+            <span class="alert-card__patient">${a.patientName || 'Unknown'}</span>
+            <span class="alert-card__type-tag">${(a.eventType || 'fall detected').replace(/_/g, ' ')}</span>
             <span class="alert-card__unread-dot"></span>
           </div>
           <div class="alert-card__desc">Room: ${a.room || '—'}</div>
@@ -275,13 +298,105 @@ function renderAlertCards() {
         </div>
       </div>
       <div class="alert-card__actions">
-        <button class="alert-view-btn"
+        <button class="alert-ack-btn" onclick="acknowledgeAlert(${a.alertId})">
+          ✓ Acknowledge
+        </button>
+        <button class="alert-view-btn secondary"
           ${a.videoUrl ? '' : 'disabled'}
-          onclick="openVideoModal('${a.alertId}')">
+          onclick="openVideoModal(${a.alertId})">
           ${a.videoUrl ? '▶ View Recording' : 'No Recording'}
         </button>
       </div>
     </div>`).join('');
+}
+
+// ── ACKNOWLEDGE ───────────────────────────────────────────────────────────────
+async function acknowledgeAlert(alertId) {
+  try {
+    const res = await fetch(`${API_BASE}/alert/${alertId}/acknowledge`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ caregiverId: CAREGIVER_ID }),
+    });
+
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+
+    // Move from active to resolved
+    const idx = allAlerts.findIndex(a => String(a.alertId) === String(alertId));
+    if (idx !== -1) {
+      const [acked] = allAlerts.splice(idx, 1);
+      acked.acknowledged   = true;
+      acked.acknowledgedAt = new Date().toISOString();
+      acked.unread         = false;
+      resolvedAlerts.unshift(acked);
+    }
+
+    renderAlertCards();
+    renderResolvedSection();
+
+    console.log(`[ACK] Alert #${alertId} acknowledged`);
+  } catch (err) {
+    console.error('[ACK] Failed to acknowledge alert:', err);
+  }
+}
+
+// ── RESOLVED SECTION ──────────────────────────────────────────────────────────
+function renderResolvedSection() {
+  let section = document.getElementById('resolved-section');
+
+  // Create section on first render
+  if (!section) {
+    const container = document.getElementById('alert-card-list')?.parentElement;
+    if (!container) return;
+    section = document.createElement('div');
+    section.id        = 'resolved-section';
+    section.className = 'resolved-section';
+    container.appendChild(section);
+  }
+
+  if (!resolvedAlerts.length) {
+    section.innerHTML = '';
+    return;
+  }
+
+  section.innerHTML = `
+    <div class="resolved-toggle" onclick="toggleResolved()">
+      <span class="resolved-toggle__label">Resolved</span>
+      <span class="resolved-toggle__count">${resolvedAlerts.length}</span>
+      <span class="resolved-toggle__chevron ${resolvedOpen ? 'open' : ''}">▼</span>
+    </div>
+    <div class="resolved-list ${resolvedOpen ? '' : 'hidden'}" id="resolved-list">
+      ${resolvedAlerts.map(a => `
+        <div class="alert-card alert-card--resolved">
+          <div class="alert-card__bar"></div>
+          <div class="alert-card__body">
+            <span class="alert-card__icon">✅</span>
+            <div class="alert-card__info">
+              <div class="alert-card__header">
+                <span class="alert-card__patient">${a.patientName || 'Unknown'}</span>
+                <span class="alert-card__resolved-tag">Resolved</span>
+              </div>
+              <div class="alert-card__desc">${(a.eventType || 'fall detected').replace(/_/g, ' ')} · Room: ${a.room || '—'}</div>
+              <div class="alert-card__meta">${formatAlertTime(a.timestamp)}</div>
+              ${a.acknowledgedAt
+                ? `<div class="alert-card__ack-meta">Acknowledged ${formatAlertTime(a.acknowledgedAt)}</div>`
+                : ''}
+            </div>
+          </div>
+          <div class="alert-card__actions">
+            <button class="alert-view-btn secondary"
+              ${a.videoUrl ? '' : 'disabled'}
+              onclick="openVideoModal(${a.alertId})">
+              ${a.videoUrl ? '▶ View Recording' : 'No Recording'}
+            </button>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function toggleResolved() {
+  resolvedOpen = !resolvedOpen;
+  renderResolvedSection();
 }
 
 function formatAlertTime(ts) {
@@ -296,12 +411,11 @@ function formatAlertTime(ts) {
 
 
 // ── VIDEO MODAL ───────────────────────────────────────────────────────────────
-
 function openVideoModal(alertId) {
-  const a = allAlerts.find(x => String(x.alertId) === String(alertId));
+  // Search both arrays
+  const a = [...allAlerts, ...resolvedAlerts].find(x => String(x.alertId) === String(alertId));
   if (!a || !a.videoUrl) return;
 
-  // Mark as read and re-render cards
   a.unread = false;
   renderAlertCards();
 
@@ -310,9 +424,9 @@ function openVideoModal(alertId) {
   const status   = document.getElementById('vmodal-status');
   const download = document.getElementById('vmodal-download');
 
-  document.getElementById('vmodal-patient').textContent  = a.patientName || 'Unknown Patient';
+  document.getElementById('vmodal-patient').textContent  = a.patientName || 'Unknown';
   document.getElementById('vmodal-subtitle').textContent =
-    `${(a.eventType || a.type || 'Fall detected').replace(/_/g, ' ')} · ${formatAlertTime(a.timestamp)}`;
+    `${(a.eventType || 'Fall detected').replace(/_/g, ' ')} · ${formatAlertTime(a.timestamp)}`;
   document.getElementById('vmodal-info').innerHTML =
     `<strong>Room:</strong> ${a.room || '—'} &nbsp;|&nbsp;
      <strong>Time:</strong> ${a.timestamp ? new Date(a.timestamp).toLocaleString() : '—'}`;
@@ -320,17 +434,15 @@ function openVideoModal(alertId) {
   download.href     = a.videoUrl;
   download.download = `incident_${alertId}.mp4`;
 
-  // Show loading status, hide when video is ready
   status.classList.remove('hidden');
-  player.addEventListener('canplay', () => status.classList.add('hidden'), { once: true });
-  player.addEventListener('error',   () => {
+  player.oncanplay = () => status.classList.add('hidden');
+  player.onerror   = () => {
     document.getElementById('vmodal-status-text').textContent = 'Could not load recording.';
-    document.getElementById('vmodal-status').querySelector('.video-modal__status-icon').textContent = '⚠️';
-  }, { once: true });
+    status.querySelector('.video-modal__status-icon').textContent = '⚠️';
+  };
 
   player.src = a.videoUrl;
   player.load();
-
   overlay.classList.remove('hidden');
 }
 
@@ -342,12 +454,10 @@ function closeVideoModal() {
   player.src = '';
 }
 
-// Close on backdrop click
 document.getElementById('video-modal-overlay')?.addEventListener('click', function(e) {
   if (e.target === this) closeVideoModal();
 });
 
-// Close on Escape
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeVideoModal();
 });
@@ -355,7 +465,6 @@ document.addEventListener('keydown', e => {
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Set today's date on home tab
   const dateEl = document.getElementById('today-date');
   if (dateEl) {
     dateEl.textContent = new Date().toLocaleDateString('en-US', {
@@ -364,50 +473,52 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   loadDashboard();
+  loadAlerts();
   openTab('home');
 
   const socket = io('https://localhost:3000');
+
   socket.on('connect', () => {
-  console.log('Socket connected:', socket.id);
-  socket.emit('join-as-caregiver', { caregiverId: CAREGIVER_ID });
-});
+    console.log('Socket connected:', socket.id);
+    socket.emit('join-as-caregiver', { caregiverId: CAREGIVER_ID });
+  });
+
   socket.on('connect_error', (err) => console.error('Socket error:', err.message));
 
   socket.on('heartrate', (value) => {
     latestHeartRate = value;
-
     const hr_element = document.getElementById('hr-value');
     const device_connection = document.getElementById('device-connected');
     if (hr_element) hr_element.textContent = value;
-    if (device_connection) device_connection.textContent = "real-time heart rate data from the watch"
+    if (device_connection) device_connection.textContent = 'Real-time heart rate data from the watch';
   });
 
   socket.on('fall-alert', (data) => {
-  console.log('[ALERT] Fall detected:', data);
+    console.log('[ALERT] Fall detected:', data);
 
-  // Add to the alerts tab list
-  pushAlert({
-    alertId:   data.alertId || ('alert-' + Date.now()),
-    patientName: data.patientName,
-    eventType: data.eventType,
-    room:      data.room,
-    timestamp: data.timestamp,
-    videoUrl:  data.videoUrl || null,
-    severity:  'critical'
+    pushAlert({
+      alertId:     data.alertId || ('alert-' + Date.now()),
+      patientName: data.patientName,
+      eventType:   data.eventType,
+      room:        data.room,
+      timestamp:   data.timestamp,
+      videoUrl:    data.videoUrl || null,
+      severity:    'critical',
+    });
+
+    // Show toast banner
+    const banner  = document.getElementById('fall-alert-banner');
+    const details = document.getElementById('fall-alert-details');
+
+    details.innerHTML =
+      'Patient: <strong>' + data.patientName + '</strong><br>' +
+      'Room: <strong>' + data.room + '</strong> · ' +
+      'Type: <strong>' + data.eventType + '</strong> · ' +
+      new Date(data.timestamp).toLocaleTimeString();
+
+    banner.style.display = 'flex';
   });
-
-  // Show the toast banner
-  const banner  = document.getElementById('fall-alert-banner');
-  const details = document.getElementById('fall-alert-details');
-
-  details.innerHTML =
-    'Patient: <strong>' + data.patientName + '</strong><br>' +
-    'Room: <strong>' + data.room + '</strong> · ' +
-    'Type: <strong>' + data.eventType + '</strong> · ' +
-    new Date(data.timestamp).toLocaleTimeString();
-
-  banner.style.display = 'flex';
-})})
+});
 
 function dismissAlert() {
   document.getElementById('fall-alert-banner').style.display = 'none';
