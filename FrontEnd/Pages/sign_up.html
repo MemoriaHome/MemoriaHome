@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>MemoriaHome - Sign Up</title>
+<link rel="stylesheet" href="../CSS/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Judson&display=swap" rel="stylesheet">
+</head>
+<body>
+<header>
+<h1><span class="dark">Memoria</span><span class="light">Home</span></h1>
+<img src="../Assets/logo1.png">
+</header>
+<div class="container">
+<div class="form-card">
+<h2>Sign up</h2>
+<form id="signup-form">
+
+  <!-- Step 1: Always visible -->
+  <select id="role-select" required>
+    <option value="">Select Role</option>
+    <option value="caregiver">Caregiver</option>
+    <option value="doctor">Doctor</option>
+    <option value="family">Family Member</option>
+  </select>
+
+  <!-- Caregiver Fields -->
+  <div id="caregiver-fields" class="role-fields" style="display:none;">
+    <input type="text" id="first-name" placeholder="First Name" required>
+    <input type="text" id="last-name" placeholder="Last Name" required>
+    <input type="email" id="email" placeholder="Email" required>
+    <input type="password" id="password" placeholder="Password" required>
+    <input type="password" id="confirm-password" placeholder="Confirm Password" required>
+    <input type="tel" id="phone" placeholder="Phone Number" required>
+    <input type="text" id="specialization" placeholder="Specialization" required>
+    <input type="text" id="licence-number" placeholder="Licence Number" required>
+    <input type="number" id="years-experience" placeholder="Years of Experience" min="0" max="255" required>
+  </div>
+
+  <!-- Doctor Fields: coming soon -->
+  <!-- Family Fields: coming soon -->
+
+  <button type="submit" id="submit-btn" style="display:none;">Submit</button>
+  <p class="link">
+    <a href="../Pages/log_in.html">Sign in</a>
+  </p>
+
+</form>
+</div>
+<div class="info-card">
+<img src="../Assets/img1.png">
+<p>
+A centralized platform connecting geriatric specialists,
+caregivers, and families through real-time patient data,
+AI-driven insights, and seamless communication.
+</p>
+<p class="powered">
+Powered by Intelligent Monitoring
+</p>
+</div>
+</div>
+<footer>
+© All Rights Reserved
+</footer>
+<script src="../JS/sign_up.js"></script>
+</body>
+</html>
