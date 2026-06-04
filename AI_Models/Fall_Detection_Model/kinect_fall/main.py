@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+from pathlib import Path
+load_dotenv(Path(__file__).parent / ".env")
+
 import queue
 import sys
 from shared.config import Config
