@@ -1,6 +1,7 @@
 import cv2
 import insightface
 import pickle
+from dotenv import load_dotenv
 import os
 import time
 import argparse
@@ -10,21 +11,21 @@ import boto3
 
 from KinectCapture import KinectCapture
 
-BUCKET= "memoriahome"
+load_dotenv()
+
+BUCKET = os.getenv('R2_BUCKET')
 PREFIX = "patients/"
 
 SAMPLE_EVERY_N = 15
 MAX_DURATION = 20
 
-
 s3 = boto3.client(
     service_name = 's3',
-    endpoint_url='https://1496516e0587f1bcbed6294961f40390.r2.cloudflarestorage.com',
-    aws_access_key_id='b97874c5d8eafde78997be23f05b6c95',
-    aws_secret_access_key='1334256a544967429926a8f3046dbc0c0d0438297efc4f159c4d71f17f524d26',
+    endpoint_url=os.getenv('R2_ENDPOINT'),
+    aws_access_key_id=os.getenv('R2_ACCESS_KEY'),
+    aws_secret_access_key=os.getenv('R2_SECRET_KEY'),
     region_name='auto',
 )
-
 
 response = s3.list_objects_v2(Bucket=BUCKET, Prefix=PREFIX, Delimiter='/')
 folders = response.get('CommonPrefixes', [])
