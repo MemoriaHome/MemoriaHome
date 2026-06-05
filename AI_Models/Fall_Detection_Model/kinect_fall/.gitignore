@@ -23,3 +23,11 @@ Thumbs.db
 
 #generated videos
 2026*/
+
+#.wav & .m4a
+sep28k_audio/*.wav
+*.csv
+.venv
+pretrained_models
+wav2vec2_checkpoints
+stutter_model
