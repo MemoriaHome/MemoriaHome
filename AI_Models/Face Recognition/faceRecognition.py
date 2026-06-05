@@ -2,6 +2,7 @@ import insightface
 import cv2
 import numpy as np
 import pickle
+import boto3
 
 
 from KinectCapture import KinectCapture
@@ -9,15 +10,47 @@ from KinectCapture import KinectCapture
 REIDENTIFY_EVERY_N = 15
 IOU_THRESHOLD = 0.35 
 
-ENCODE_FILE= "Patients_Embeddings.p"
+BUCKET= "memoriahome"
+PREFIX = "patients/"
+
+s3 = boto3.client(
+    service_name = 's3',
+    endpoint_url='https://1496516e0587f1bcbed6294961f40390.r2.cloudflarestorage.com',
+    aws_access_key_id='b97874c5d8eafde78997be23f05b6c95',
+    aws_secret_access_key='1334256a544967429926a8f3046dbc0c0d0438297efc4f159c4d71f17f524d26',
+    region_name='auto',
+)
 
 
-def load_encodings(path: str):
-    print(f"[INFO] Loading encodings from '{path}' ...")
-    with open(path, "rb") as f:
-        data = pickle.load(f)
-    known_embeddings, known_ids = data
-    known_embeddings = np.array(known_embeddings, dtype=np.float32)
+def load_encodings():
+    print(f"[INFO] Loading encodings from database...")
+
+    embeddingsListKnown = []
+    known_ids = []
+
+    response = s3.list_objects_v2(Bucket=BUCKET, Prefix=PREFIX, Delimiter='/')
+    folders = response.get('CommonPrefixes', [])
+
+    if not folders:
+        print("No patients found in the database")
+        return np.array([]), []
+        
+    for person in folders:
+        person_prefix = person['Prefix']
+        person_id = person_prefix.rstrip('/').split('/')[-1]
+
+        emb_path = f'{person_prefix}embedding.pkl'
+        try:
+            obj = s3.get_object(Bucket=BUCKET, Key=emb_path)
+            embeddings = pickle.loads(obj["Body"].read())
+            for emb in embeddings:
+                embeddingsListKnown.append(emb)
+                known_ids.append(person_id)
+            print(f"[INFO] Loaded {len(embeddings)} embedding(s) for ID {person_id}")
+        except Exception as e:
+            print(f"[WARNING] Could not load {emb_path}: {e}")
+            
+    known_embeddings = np.array(embeddingsListKnown, dtype=np.float32)
 
     norms = np.linalg.norm(known_embeddings, axis=1, keepdims=True)
     known_embeddings = known_embeddings / np.clip(norms, 1e-10, None)
@@ -25,7 +58,6 @@ def load_encodings(path: str):
     print(f"[INFO] Loaded {len(known_ids)} embedding(s) "
           f"for {len(set(known_ids))} identity/identities.")
     return known_embeddings, known_ids
-
 
 
 def compute_iou(a, b):
@@ -148,10 +180,7 @@ def at_diff_angles(imgS, app, app_small, known_embeddings, known_ids, tracker: F
 
 
 def main():
-    known_embeddings, known_ids = load_encodings(ENCODE_FILE)
-    print(f"known_embeddings shape: {known_embeddings.shape}")
-    print(f"known_ids: {known_ids}")
-    print(f"sample embedding (first 5 values): {known_embeddings[0][:5]}")
+    known_embeddings, known_ids = load_encodings()
 
     app = insightface.app.FaceAnalysis('buffalo_l', providers=['CUDAExecutionProvider'])
     app.prepare(ctx_id=0, det_size=(640, 640))
@@ -165,6 +194,7 @@ def main():
 
     while True:
         img = cap.read()
+
         if img is None:
             cv2.waitKey(1)
             continue
