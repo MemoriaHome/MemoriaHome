@@ -248,19 +248,8 @@ class AudioDetectionModule:
                     if rms < 0.01:
                         continue
 
-                    # run both analyses in parallel
-                    emotion_thread = threading.Thread(
-                        target=self._analyze_emotion,
-                        args=(window.copy(),),
-                        daemon=True
-                    )
-                    stutter_thread = threading.Thread(
-                        target=self._analyze_stutter,
-                        args=(window.copy(),),
-                        daemon=True
-                    )
-                    emotion_thread.start()
-                    stutter_thread.start()
+                    self._analyze_emotion(window.copy())
+                    self._analyze_stutter(window.copy())
 
                     # feed to speech module if connected
                     if self._speech_module:
@@ -272,12 +261,6 @@ class AudioDetectionModule:
                 print(f"[AUDIO ERROR] {e}")
                 import traceback
                 traceback.print_exc()
-
-        if hasattr(self, '_speech_module') and self._speech_module:
-                self._speech_module.feed_audio(window)
-
-    def set_speech_module(self, speech_module):
-        self._speech_module = speech_module
 
     # emotion detection (speechbrain)
 
@@ -299,7 +282,6 @@ class AudioDetectionModule:
             confidence = float(score[0])
             is_distress = emotion in self.DISTRESS_EMOTIONS
 
-            # map emotion to distress level
             if emotion in ['ang', 'fea']:
                 level = 'critical'
             elif emotion in ['sad', 'dis']:
@@ -307,23 +289,19 @@ class AudioDetectionModule:
             else:
                 level = 'neutral'
 
-            # debug output
-            print(f"[AUDIO DEBUG] Emotion: {emotion} "
-                  f"({confidence:.0%}) — {level}")
+            print(f"[AUDIO DEBUG] SpeechBrain: {emotion} "
+                f"({confidence:.0%}) — {level}")
 
             with self._lock:
                 if is_distress and confidence >= self.AUDIO_THRESHOLD:
                     if self._should_alert(emotion):
                         print(f"[AUDIO] {level.upper()}: "
-                              f"Emotion={emotion} "
-                              f"({confidence:.0%})")
+                            f"Emotion={emotion} ({confidence:.0%})")
                     self.distress_detected   = True
                     self.distress_label      = emotion
                     self.distress_level      = level
                     self.distress_confidence = confidence
                     self._last_distress_time = time.time()
-                else:
-                    pass # let get_state() handle it
 
         except Exception as e:
             print(f"[AUDIO] SpeechBrain emotion error: {e}")

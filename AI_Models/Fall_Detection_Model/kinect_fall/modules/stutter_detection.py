@@ -2,12 +2,9 @@ import os
 import queue
 import threading
 import time
-import tempfile
 import numpy as np
 import torch
-import torchaudio
-from transformers import Wav2Vec2ForSequenceClassification
-from transformers import Wav2Vec2Processor
+from transformers import Wav2Vec2ForSequenceClassification, Wav2Vec2Processor
 
 from shared.config import Config
 
@@ -42,6 +39,9 @@ class StutterDetectionModule:
         self._audio_queue = queue.Queue()
         self._running     = False
 
+        # Assign execution device dynamically 
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         # public state
         self.stutter_detected  = False
         self.stutter_type      = ""
@@ -52,25 +52,32 @@ class StutterDetectionModule:
         self._load_model()
 
     def _load_model(self):
-        print("[STUTTER] Loading wav2vec2 stuttering model...")
+        # FIX 1: Point path to your local fine-tuned outputs folder
+        model_path = 'stutter_model/final'
+        
+        if not os.path.exists(model_path):
+            print(f"[STUTTER] Fine-tuned path '{model_path}' not found. Falling back to base configurations...")
+            model_path = "facebook/wav2vec2-base"
+
+        print(f"[STUTTER] Loading wav2vec2 model from: {model_path} on {self.device}...")
         try:
-            # this model is fine-tuned on sep-28k for stuttering
-            self._processor = Wav2Vec2Processor.from_pretrained(
-                "facebook/wav2vec2-base"
-            )
+            self._processor = Wav2Vec2Processor.from_pretrained(model_path)
+            
+            # Load weights and immediately map them onto target computing architecture
             self._model = Wav2Vec2ForSequenceClassification.from_pretrained(
-                "facebook/wav2vec2-base",
-                num_labels=len(self.STUTTER_LABELS)
-            )
+                model_path,
+                num_labels=len(self.STUTTER_LABELS),
+                ignore_mismatched_sizes=True
+            ).to(self.device)
+            
             self._model.eval()
-            print("[STUTTER] Model loaded")
+            print("[STUTTER] Model loaded successfully.")
         except Exception as e:
             print(f"[STUTTER] Model load failed: {e}")
             self._model     = None
             self._processor = None
 
     # public interface
-
     def feed_audio(self, audio_chunk: np.ndarray):
         self._audio_queue.put(audio_chunk.copy())
 
@@ -98,7 +105,6 @@ class StutterDetectionModule:
             }
 
     # internal
-
     def _processing_loop(self):
         buffer     = np.array([], dtype=np.float32)
         chunk_size = int(self.SAMPLE_RATE * self.WINDOW_SECONDS)
@@ -130,6 +136,7 @@ class StutterDetectionModule:
             return
 
         try:
+            # Tokenize audio stream array
             inputs = self._processor(
                 audio,
                 sampling_rate=self.SAMPLE_RATE,
@@ -137,7 +144,11 @@ class StutterDetectionModule:
                 padding=True
             )
 
+            # FIX 2: Explicitly move processed input tensors onto the correct execution device
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
             with torch.no_grad():
+                # FIX 3: Unpack keys directly (**inputs) to carry attention masks along cleanly
                 logits = self._model(**inputs).logits
 
             probs      = torch.softmax(logits, dim=-1)[0]
@@ -160,7 +171,6 @@ class StutterDetectionModule:
                         'score':     pred_score,
                         'timestamp': time.time()
                     })
-                    # keep last 10
                     if len(self.stutter_history) > 10:
                         self.stutter_history.pop(0)
 
@@ -186,8 +196,7 @@ class StutterDetectionModule:
                 return
 
             # check for repetitive patterns
-            # stuttering often shows closely spaced onsets
-            gaps          = np.diff(onsets)
+            gaps        = np.diff(onsets)
             short_gaps    = np.sum(gaps < 0.15)  # < 150ms = repetition
             repetition    = short_gaps > 2
 
