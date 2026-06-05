@@ -6,7 +6,9 @@ import { Repository } from 'typeorm';
 import { Caregiver } from '../entities/caregiver.entity';
 import { User } from '../entities/user.entity'
 import * as bcrypt from 'bcrypt';
-
+import { CaregiverService } from '../caregiver/caregiver.service';
+import { JwtService } from '@nestjs/jwt';
+import { UserLoginDto } from '../Common/userlogin.dto'
 
 @Injectable()
 export class AuthService {
@@ -16,7 +18,9 @@ export class AuthService {
     private caregiverRepository: Repository<Caregiver>,
 
     @InjectRepository(User)
-    private userRepository: Repository<User>
+    private userRepository: Repository<User>,
+
+    private jwtService: JwtService,
   ) {}
 
     async signup(createCaregiverDto: CreateCaregiverDto) {  
@@ -39,30 +43,51 @@ export class AuthService {
     phone: createCaregiverDto.phone,
     specialization: createCaregiverDto.specialization,
     license_number: createCaregiverDto.license_number,
-    years_experience: createCaregiverDto.years_experience
+    years_experience: createCaregiverDto.years_experience,
+    user: user,
   });
   return await this.caregiverRepository.save(caregiver);
 
     }
 
-  async login(createUserDto: CreateUserDto){
-      const submitted_email = createUserDto.email; //email submitted in form
+  async login(userlogindto: UserLoginDto){
+      const submitted_email = userlogindto.email; //email submitted in form
 
       const target = await this.userRepository.findOne({
         where: {email:submitted_email}
       }) //find target by email
-
       if(!target)
         throw new NotFoundException('User Does Not Exist'); //keep code determanistic (if user is not found)
       
-      const isMatch = await bcrypt.compare(createUserDto.pass, target.pass) //comapares submitted password hash with stored hash
+      const isMatch = await bcrypt.compare(userlogindto.pass, target.pass) //comapares submitted password hash with stored hash
 
-      console.log(target.pass)
-      console.log(createUserDto.pass)
-
-      if(!isMatch)
+      if(!isMatch){
         throw new UnauthorizedException('Invalid Credentials');
+      }
+      else if(target.role == 'caregiver'){
+         const target_role = await this.caregiverRepository.findOne({relations: ['user'], where: {user: {user_id: target.user_id}}})
+         
+         if(!target_role){
+          throw new NotFoundException('Not registered with a role')
+         }
 
+          const payload = {
+            sub: target.user_id,
+            email: target.email,
+            role: 'caregiver',
+            rid: target_role.caregiver_id
+    };
+          return {
+            access_token: this.jwtService.sign(payload),
+            user: {
+              uid: target.user_id,              
+              rid: target_role.caregiver_id,
+              username: target.email,
+              name: target_role.first_name,
+              role: 'caregiver'
+            }
+          }
+      }
       return target
     }
   }

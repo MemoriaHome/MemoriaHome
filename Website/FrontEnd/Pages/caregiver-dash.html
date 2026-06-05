@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MemoriaHome — Care Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Judson:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../CSS/caregiver-dash.css">
+</head>
+<body id="family-nurse-page">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-dark">Memoria</span><span class="brand-light">Home</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" id="btn-home" onclick="openTab('home')">
+        <span class="nav-ico">🏠</span>
+        <span class="nav-lbl">Home</span>
+      </button>
+      <button class="nav-btn" id="btn-patients" onclick="openTab('patients')">
+        <span class="nav-ico">👥</span>
+        <span class="nav-lbl">Patients</span>
+      </button>
+      <button class="nav-btn" id="btn-account" onclick="openTab('account')">
+        <span class="nav-ico">👤</span>
+        <span class="nav-lbl">Account</span>
+      </button>
+      <button class="nav-btn" id="btn-alerts" onclick="openTab('alerts')">
+        <span class="nav-ico">🔔</span>
+        <span class="nav-lbl">Alerts</span>
+        <span class="nav-badge" id="alerts-nav-badge" style="display:none">0</span>
+      </button>
+      <button class="nav-btn" id="btn-settings" onclick="openTab('settings')">
+        <span class="nav-ico">⚙️</span>
+        <span class="nav-lbl">Settings</span>
+      </button>
+    </nav>
+
+    <div id="fall-alert-banner" style="display:none">
+  <div id="fall-alert-card">
+    <div id="fall-alert-icon">⚠️</div>
+    <div id="fall-alert-body">
+      <div id="fall-alert-title">Fall Detected</div>
+      <div id="fall-alert-details"></div>
+    </div>
+    <button id="fall-alert-dismiss" onclick="dismissAlert()">✕</button>
+  </div>
+</div>
+
+    <div class="sidebar-user">
+      <div class="user-avatar" id="header-avatar">--</div>
+      <div class="sidebar-user-info">
+        <span class="user-name" id="header-name">Loading...</span>
+        <span class="user-role">Caregiver</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main-content">
+
+    <!-- HOME TAB -->
+    <div id="home" class="tab-content active">
+      <div class="page-header">
+        <h2 id="welcome-msg">Welcome back</h2>
+        <p class="subtitle" id="today-date"></p>
+      </div>
+
+      <div class="home-top-row">
+        <div class="stat-grid">
+          <div class="stat-tile">
+            <span class="stat-num" id="stat-patients">—</span>
+            <span class="stat-lbl">Patients</span>
+          </div>
+          <div class="stat-tile stat-tile--alert">
+            <span class="stat-num">2</span>
+            <span class="stat-lbl">Alerts</span>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-num">2</span>
+            <span class="stat-lbl">Visits</span>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-num">3</span>
+            <span class="stat-lbl">Tasks</span>
+          </div>
+        </div>
+
+        <div class="home-panel">
+          <h3 class="panel-title">Recent Alerts</h3>
+          <div class="alert-list">
+            <div class="alert-row alert-row--critical">
+              <div class="alert-bar"></div>
+              <div class="alert-body">
+                <span class="alert-name">Margaret O'Brien</span>
+                <span class="alert-desc">Vitals outside normal range</span>
+              </div>
+              <span class="alert-ago">3h ago</span>
+            </div>
+            <div class="alert-row alert-row--warning">
+              <div class="alert-bar"></div>
+              <div class="alert-body">
+                <span class="alert-name">Andrea Adams</span>
+                <span class="alert-desc">Missed medication dose</span>
+              </div>
+              <span class="alert-ago">5h ago</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="section-label">Quick Actions</h3>
+      <div class="quick-grid">
+        <div class="quick-card" onclick="openTab('patients')">
+          <span class="quick-icon">👥</span><span class="quick-lbl">My Patients</span>
+        </div>
+        <div class="quick-card quick-card--alert" onclick="openTab('alerts')" style="cursor:pointer">
+          <span class="quick-icon">⚠️</span><span class="quick-lbl">Alerts</span>
+          <span class="quick-badge">2</span>
+        </div>
+        <div class="quick-card">
+          <span class="quick-icon">📅</span><span class="quick-lbl">Schedule</span>
+        </div>
+        <div class="quick-card">
+          <span class="quick-icon">📋</span><span class="quick-lbl">Reports</span>
+        </div>
+        <div class="quick-card">
+          <span class="quick-icon">💊</span><span class="quick-lbl">Medications</span>
+        </div>
+        <div class="quick-card">
+          <span class="quick-icon">🔔</span><span class="quick-lbl">Reminders</span>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- PATIENTS TAB -->
+    <div id="patients" class="tab-content">
+      <div class="page-header">
+        <h2>My Patients</h2>
+        <p class="subtitle">Click a patient to view their profile</p>
+      </div>
+      <div id="patient-list" class="patient-grid">
+        <p class="loading-msg">Loading patients...</p>
+      </div>
+    </div>
+
+
+    <!-- PATIENT PROFILE TAB -->
+    <div id="patient-profile" class="tab-content">
+      <button class="back-btn" onclick="closeProfile()">← Back to Patients</button>
+
+      <div class="profile-hero">
+        <div class="profile-avatar" id="profile-avatar"></div>
+        <div class="profile-hero-info">
+          <h2 class="profile-name" id="profile-name"></h2>
+          <span id="profile-stage-badge" class="stage-badge"></span>
+        </div>
+      </div>
+
+      <div class="profile-tabs">
+        <button class="ptab-btn active-ptab" onclick="showProfileTab('overview', this)">Overview</button>
+        <button class="ptab-btn" onclick="showProfileTab('medical', this)">Medical</button>
+        <button class="ptab-btn" onclick="showProfileTab('contact', this)">Contact</button>
+        <button class="ptab-btn" onclick="showProfileTab('camera', this); initCamera()">Camera</button>
+      </div>
+
+      <div id="overview" class="profile-section active-psection"></div>
+      <div id="medical"  class="profile-section"></div>
+      <div id="contact"  class="profile-section"></div>
+
+      <!-- CAMERA TAB -->
+      <div id="camera" class="profile-section">
+
+        <!-- Status bar -->
+        <div class="cam-status-bar">
+          <span class="cam-status-dot" id="cam-dot"></span>
+          <span class="cam-status-text" id="cam-status-text">Not connected</span>
+          <button class="cam-disconnect-btn" id="cam-disconnect-btn" onclick="disconnectCamera()" style="display:none">
+            Disconnect
+          </button>
+        </div>
+
+        <!-- Device picker (shown when multiple devices available) -->
+        <div id="cam-device-list" class="cam-device-list" style="display:none"></div>
+
+        <!-- Video feed -->
+        <div class="cam-video-wrap">
+          <!-- Placeholder shown before connection -->
+          <div class="camera-placeholder" id="cam-placeholder">
+            <div class="camera-icon">📷</div>
+            <p class="camera-label">Camera feed will appear here</p>
+          </div>
+
+          <div class="cam-feed-selector">
+            <label for="feedSelector">Camera Feed:</label>
+               <select id="feedSelector">
+                 <option value="RGB">RGB</option>
+                 <option value="IR">Infrared</option>
+                 <option value="Depth">Depth</option>
+               </select>
+          </div>
+
+          <!-- Video element shown during call -->
+          <video id="cam-video" autoplay playsinline style="display:none; width:100%; border-radius:var(--radius);"></video>
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- ALERTS TAB -->
+    <div id="alerts" class="tab-content">
+      <div class="page-header">
+        <h2>Alerts</h2>
+        <p class="subtitle">Incident history for your assigned patients</p>
+      </div>
+
+      <div class="alerts-toolbar">
+        <button class="alerts-filter-btn active" onclick="filterAlerts('all', this)">All</button>
+        <button class="alerts-filter-btn" onclick="filterAlerts('unread', this)">Unread</button>
+        <button class="alerts-filter-btn" onclick="filterAlerts('critical', this)">Critical</button>
+        <span class="alerts-count" id="alerts-count-label"></span>
+      </div>
+
+      <div class="alert-card-list" id="alert-card-list">
+        <div class="alerts-empty">
+          <div class="alerts-empty__icon">🔕</div>
+          <div class="alerts-empty__text">No alerts yet</div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ACCOUNT TAB -->
+    <div id="account" class="tab-content">
+      <div class="page-header"><h2>My Profile</h2></div>
+      <div class="info-card" id="account-card">
+        <p class="loading-msg">Loading profile...</p>
+      </div>
+    </div>
+
+
+    <!-- SETTINGS TAB -->
+    <div id="settings" class="tab-content">
+      <div class="page-header"><h2>Settings</h2></div>
+      <div class="info-card">
+        <div class="info-row toggle-row">
+          <span class="info-lbl">Push Notifications</span>
+          <label class="toggle"><input type="checkbox" checked><span class="slider"></span></label>
+        </div>
+        <div class="info-row toggle-row">
+          <span class="info-lbl">Alert Sounds</span>
+          <label class="toggle"><input type="checkbox" checked><span class="slider"></span></label>
+        </div>
+        <div class="info-row toggle-row">
+          <span class="info-lbl">Daily Summary Email</span>
+          <label class="toggle"><input type="checkbox"><span class="slider"></span></label>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- VIDEO PLAYER MODAL -->
+  <div class="video-modal-overlay hidden" id="video-modal-overlay">
+    <div class="video-modal" role="dialog" aria-modal="true">
+
+      <div class="video-modal__header">
+        <span class="video-modal__header-icon">🎥</span>
+        <div class="video-modal__title">
+          <div class="video-modal__patient" id="vmodal-patient">—</div>
+          <div class="video-modal__subtitle" id="vmodal-subtitle">—</div>
+        </div>
+        <button class="video-modal__close" onclick="closeVideoModal()" aria-label="Close">✕</button>
+      </div>
+
+      <div class="video-modal__body">
+        <video class="video-modal__player" id="vmodal-player"
+               controls preload="metadata">
+          Your browser does not support HTML5 video.
+        </video>
+        <div class="video-modal__status hidden" id="vmodal-status">
+          <span class="video-modal__status-icon">⏳</span>
+          <span id="vmodal-status-text">Loading recording…</span>
+        </div>
+      </div>
+
+      <div class="video-modal__footer">
+        <div class="video-modal__alert-info" id="vmodal-info">—</div>
+        <a class="video-modal__download" id="vmodal-download" href="#" download>⬇ Download clip</a>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="../JS/caregiver-dash.js"></script>
+</body>
+</html>

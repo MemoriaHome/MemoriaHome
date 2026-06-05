@@ -1,9 +1,9 @@
 import { IsString, IsNumber, IsEmail, Min, Max } from 'class-validator';
-import { CreateUserDto } from "src/Common/create-user.dto";
+import { CreateUserDto } from "../../Common/create-user.dto";
 
 export class CreateCaregiverDto extends CreateUserDto {
 
-      @IsString()
+     @IsString()
      first_name: string;
 
      @IsString()

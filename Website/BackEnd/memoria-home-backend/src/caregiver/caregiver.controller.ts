@@ -5,7 +5,10 @@ import { UpdateCaregiverDto } from './dto/update-caregiver.dto';
 
 @Controller('caregiver')
 export class CaregiverController {
-  constructor(private readonly caregiverService: CaregiverService) {}
+
+  constructor(
+    private readonly caregiverService: CaregiverService,
+  ) {}
 
   @Post()
   create(@Body() createCaregiverDto: CreateCaregiverDto) {
@@ -20,6 +23,12 @@ export class CaregiverController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.caregiverService.findOne(+id);
+  }
+
+  // Returns the caregiver's profile + all their assigned patients
+  @Get(':id/patients')
+  getMyPatients(@Param('id') id: string) {
+    return this.caregiverService.getMyPatients(+id);
   }
 
   @Patch(':id')
