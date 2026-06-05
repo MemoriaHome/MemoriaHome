@@ -1,0 +1,40 @@
+#kinect fall python virtual enviroment
+AI_Models/Fall_Detection_Model/kinect_fall/.venv
+
+#Audio SEP-28k data set
+AI_Models/Fall_Detection_Model/kinect_fall/sep28k_audio/*.wav
+
+#Dataset labels
+*.csv
+
+#Models downloaded by code or pip
+AI_Models/Fall_Detection_Model/kinect_fall/pretrained_models/*
+AI_Models/Fall_Detection_Model/kinect_fall/stutter_model
+AI_Models/Fall_Detection_Model/kinect_fall/yolo models/*.pt
+AI_Models/Fall_Detection_Model/kinect_fall/yolo models/*.ckpt
+AI_Models/Fall_Detection_Model/kinect_fall/yolo models/*.bin
+AI_Models/Fall_Detection_Model/kinect_fall/yolo models/*.h5
+
+#Generated files from code
+AI_Models/Fall_Detection_Model/kinect_fall/wav2vec2_checkpoints
+*pyc
+*pyo
+*pyd
+
+# vs code
+.vscode/
+
+# Compiled output
+/dist
+/build
+*.tsbuildinfo
+
+# Dependencies
+/node_modules
+
+# Environment variables & secrets
+.env
+*.env
+.env.production
+.env.development
+.env.local
