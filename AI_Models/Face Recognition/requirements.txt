@@ -1,7 +1,0 @@
-torch==2.5.1+cu121
-torchvision==0.20.1+cu121
-insightface==0.7.3
-onnxruntime-gpu==1.23.2
-opencv-contrib-python==4.13.0.92
-pykinect2
-boto3
