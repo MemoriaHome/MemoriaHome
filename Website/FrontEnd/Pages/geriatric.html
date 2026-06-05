@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MemoriaHome - Doctor Dashboard</title>
+  <link rel="stylesheet" href="../CSS/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Judson&display=swap" rel="stylesheet">
+</head>
+<body id="geriatric-page">
+
+<header>
+  <h1><span class="dark"><em>Welcome to </em></span><span class="dark">Memoria</span><span class="light">Home</span></h1>
+</header>
+
+<div class="dashboard">
+
+  <!-- HOME TAB -->
+  <div id="home" class="tab-content active">
+    <h2>Dr. Wilson</h2>
+    <div class="dashboard-grid">
+      <div class="dash-card">
+        <div class="round-sections four">
+          <div class="round-section">Active Patients: 31</div>
+          <div class="round-section">Patients Needing Review: 5</div>
+          <div class="round-section">Alerts Today: 3</div>
+          <div class="round-section">Upcoming Checkups: 2</div>
+        </div>
+      </div>
+      <div class="dash-card">
+        <div class="round-sections two">
+          <div class="round-section">Calendar</div>
+          <div class="round-section" style="background-color: #C62224;">High Risk Patients</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- PATIENTS TAB -->
+<div id="patients" class="tab-content">
+  <h2>Dr. Wilson</h2>
+
+  <!-- Card container -->
+  <div class="patients-card">
+    <table id="patients-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Age</th>
+          <th>Risk Level</th>
+          <th>Last Visit</th>
+          <th>Next Check Up</th>
+          <th>Alert Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Rows will be dynamically added here -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PATIENT PROFILE PAGE -->
+<div id="patient-profile" class="tab-content">
+  <div class="profile-header">
+    <h2 id="profile-name"></h2>
+    <button onclick="closeProfile()" class="back-btn">Back to Patients</button>
+  </div>
+
+  <!-- Tabs inside profile -->
+  <div class="profile-tabs">
+    <button onclick="showProfileTab('overview')" class="active-tab">Overview</button>
+    <button onclick="showProfileTab('medications')">Medications</button>
+    <button onclick="showProfileTab('alerts')">Alerts</button>
+  </div>
+
+  <!-- Tab content -->
+  <div id="overview" class="profile-tab active-tab">
+    <!-- Filled dynamically by JS -->
+  </div>
+
+  <div id="medications" class="profile-tab">
+    <p>Medications information will appear here.</p>
+  </div>
+
+  <div id="alerts" class="profile-tab">
+    <p>Recent alerts will appear here.</p>
+  </div>
+</div>
+
+  <!-- ACCOUNT TAB -->
+  <div id="account" class="tab-content">
+    <h2>Account</h2>
+    <p>Doctor profile information.</p>
+  </div>
+
+  <!-- SETTINGS TAB -->
+  <div id="settings" class="tab-content">
+    <h2>Settings</h2>
+    <p>System settings and preferences.</p>
+  </div>
+
+</div>
+
+<!-- BOTTOM NAVIGATION -->
+<div class="bottom-nav">
+  <button onclick="openTab('settings')" id="btn-settings">
+    <img src="../Assets/settings.png" class="nav-icon"><span>Settings</span>
+  </button>
+  <button onclick="openTab('account')" id="btn-account">
+    <img src="../Assets/account.png" class="nav-icon"><span>Account</span>
+  </button>
+  <button onclick="openTab('home')" id="btn-home">
+    <img src="../Assets/home.png" class="nav-icon"><span>Home</span>
+  </button>
+  <button onclick="openTab('patients')" id="btn-patients">
+    <img src="../Assets/patients.png" class="nav-icon"><span>Patients</span>
+  </button>
+</div>
+
+<script src="../JS/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Patient Profile - MemoriaHome</title>
+  <link rel="stylesheet" href="../CSS/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Judson&display=swap" rel="stylesheet">
+</head>
+<body id="geriatric-page">
+
+<header>
+  <img src ="../Assets/back.png" class ="profile-back" onclick="goBack()">
+  <h1><span class="dark"><em>Patient Profile: </em></span><span class="light" id="profile-name">Name</span></h1>
+</header>
+
+<div class="dashboard">
+
+  <!-- Tab Contents -->
+  <div id="overview" class="tab-content active"></div>
+  <div id="medical_history" class="tab-content"></div>
+  <div id="treatment_plan" class="tab-content"></div>
+
+</div>
+
+<!-- Bottom Navigation (like geriatric page) -->
+<div class="bottom-nav">
+  <button onclick="openProfileTab('overview')" id="btn-overview" class="active">
+    <img src="../Assets/overview.png" class="nav-icon"><span>Overview</span>
+  </button>
+  <button onclick="openProfileTab('medical_history')" id="btn-medical_history">
+    <img src="../Assets/history.png" class="nav-icon"><span>Medical History</span>
+  </button>
+  <button onclick="openProfileTab('treatment_plan')" id="btn-treatment_plan">
+    <img src="../Assets/calendar.png" class="nav-icon"><span>Treatment Plan</span>
+  </button>
+</div>
+
+<script src="../JS/profile.js"></script>
+</body>
+</html>
