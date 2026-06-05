@@ -3,21 +3,24 @@ import cv2
 import numpy as np
 import pickle
 import boto3
-
+import os
+from dotenv import load_dotenv
 
 from KinectCapture import KinectCapture
 
 REIDENTIFY_EVERY_N = 15
 IOU_THRESHOLD = 0.35 
 
-BUCKET= "memoriahome"
+load_dotenv()
+
+BUCKET = os.getenv('R2_BUCKET')
 PREFIX = "patients/"
 
 s3 = boto3.client(
     service_name = 's3',
-    endpoint_url='https://1496516e0587f1bcbed6294961f40390.r2.cloudflarestorage.com',
-    aws_access_key_id='b97874c5d8eafde78997be23f05b6c95',
-    aws_secret_access_key='1334256a544967429926a8f3046dbc0c0d0438297efc4f159c4d71f17f524d26',
+    endpoint_url=os.getenv('R2_ENDPOINT'),
+    aws_access_key_id=os.getenv('R2_ACCESS_KEY'),
+    aws_secret_access_key=os.getenv('R2_SECRET_KEY'),
     region_name='auto',
 )
 
