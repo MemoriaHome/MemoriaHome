@@ -48,7 +48,7 @@ export class AlertService {
     await this.patientAlertRepo.save(patientAlert);
 
     // 3. Resolve patient name
-    const patient = await this.patientRepo.findOneBy({ patient_id: Number(dto.patientId) });
+    const patient = await this.patientRepo.findOneBy({ patient_id: Number(dto.recognizedPatientId) });
     const patientName = patient ? `${patient.first_name} ${patient.last_name}` : 'Unknown';
 
     // 4. Emit to assigned caregivers

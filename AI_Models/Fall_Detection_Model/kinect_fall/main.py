@@ -30,15 +30,15 @@ def main():
     display_queue        = queue.Queue(maxsize=10)  # Compositor → Display
     command_queue        = queue.Queue()
 
-    fall_module       = FallDetectionModule(fall_queue, config, fall_annotated_queue, command_queue, verbose=args.verbose)
     face_module       = FaceRecognitionModule(face_queue, config, face_results_queue)
+    fall_module       = FallDetectionModule(fall_queue, config, fall_annotated_queue, command_queue, verbose=args.verbose, face_module=face_module)
     compositor_module = CompositorModule(fall_annotated_queue, face_results_queue, display_queue)
     display_module    = DisplayModule(display_queue, config, command_queue)
 
-    fall_module.start()
     face_module.start()
-    compositor_module.start()
+    fall_module.start()
     display_module.start()
+    compositor_module.start()
 
     capture = KinectCapture(bus)
     try:

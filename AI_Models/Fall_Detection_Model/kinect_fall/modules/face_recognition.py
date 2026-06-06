@@ -1,6 +1,7 @@
 import os
 import pickle
 import queue
+import threading
 
 import boto3
 import cv2
@@ -204,6 +205,18 @@ class FaceRecognitionModule(BaseModule):
 
         self._tracker = FaceTracker()
 
+        self._identity_lock    = threading.Lock()
+        self._current_identity = None   # best match in the most recent frame
+        self._session_identity = None   # latched identity for the current tracking session
+
+    def get_identity(self) -> str | None:
+        """
+        Returns the most recently recognized patient ID, or None if no face
+        has been matched yet. Thread-safe — safe to call from any module.
+        """
+        with self._identity_lock:
+            return self._current_identity
+
     def _load_encodings(self):
         print("[INFO] Loading encodings from database...")
 
@@ -284,3 +297,40 @@ class FaceRecognitionModule(BaseModule):
                 self._face_results_queue.put_nowait(results)
             except queue.Full:
                 pass
+
+        # Update the shared identity: pick the highest-similarity matched face,
+        # fall back to None if nobody was recognized this frame.
+        best = next(
+            (name for _, name, _, is_match, _ in
+             sorted(results, key=lambda r: r[2], reverse=True)
+             if is_match),
+            None,
+        )
+        with self._identity_lock:
+            self._current_identity = best
+            # Latch the first confident match as the session identity.
+            # Once set, it stays frozen for the lifetime of the tracking
+            # session so the fall alert always names who started being tracked.
+            if self._session_identity is None and best is not None:
+                self._session_identity = best
+                print(f"[FACE] Identity latched for session: {best}")
+
+    def begin_session(self) -> None:
+        """Called when the body tracker locks onto a new body.
+        Clears any previous session identity so identification starts fresh."""
+        with self._identity_lock:
+            self._session_identity = None
+            self._current_identity = None
+
+    def end_session(self) -> None:
+        """Called when the fall state is reset (incident resolved or body lost).
+        Clears the session identity ready for the next tracking session."""
+        with self._identity_lock:
+            self._session_identity = None
+            self._current_identity = None
+
+    def get_identity(self) -> str | None:
+        """Return the patient ID latched at the start of the current tracking
+        session, or None if no face has been matched yet this session."""
+        with self._identity_lock:
+            return self._session_identity

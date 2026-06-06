@@ -11,6 +11,10 @@ export class CreateFallAlertDto {
 
   @IsString()
   @IsNotEmpty()
+  recognizedPatientId: string;
+
+  @IsString()
+  @IsNotEmpty()
   room: string;
 
   @IsString()

@@ -37,9 +37,11 @@ class FallDetectionModule(BaseModule):
     def __init__(self, frame_queue: queue.Queue, config: Config,
                  annotated_queue: queue.Queue = None,
                  command_queue: queue.Queue = None,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 face_module=None):
         super().__init__(frame_queue)
         self._verbose         = verbose
+        self._face_module     = face_module
         self._config          = config
         self._annotated_queue = annotated_queue
         self._command_queue   = command_queue
@@ -197,21 +199,25 @@ class FallDetectionModule(BaseModule):
 
             if abs(height_from_floor) > self.FLOOR_RECOVERED_THRESHOLD:
                 print("Recovery detected.")
+                recognized_id = self._face_module.get_identity() if self._face_module else None
                 threading.Thread(
                     target=self._save_video_clip,
                     args=("Recovered Fall",
                           list(self._frozen_video_frames_before),
-                          list(self._video_frames_after)),
+                          list(self._video_frames_after),
+                          recognized_id),
                     daemon=True,
                 ).start()
                 self._reset_fall_state()
             elif elapsed >= self.MIN_ELAPSED_TIME:
                 print("FALL CONFIRMED.")
+                recognized_id = self._face_module.get_identity() if self._face_module else None
                 threading.Thread(
                     target=self._save_video_clip,
                     args=("Unrecovered Fall",
                           list(self._frozen_video_frames_before),
-                          list(self._video_frames_after)),
+                          list(self._video_frames_after),
+                          recognized_id),
                     daemon=True,
                 ).start()
                 self._reset_fall_state()
@@ -273,6 +279,8 @@ class FallDetectionModule(BaseModule):
                 self._locked_body_last_seen = now
                 if self._verbose:
                     print(f"[BODY] Locked onto body index {i}")
+                if self._face_module is not None and not self._fallen_state:
+                    self._face_module.begin_session()
                 return i
 
         return None
@@ -296,6 +304,8 @@ class FallDetectionModule(BaseModule):
         self._spine_history              = []
         self._floor_contact_start        = None
         self._locked_body_index          = None
+        if self._face_module is not None:
+            self._face_module.end_session()
 
     # Velocity calculation
 
@@ -330,7 +340,7 @@ class FallDetectionModule(BaseModule):
 
     # Video & upload
 
-    def _save_video_clip(self, event_type: str, before_frames: list, after_frames: list):
+    def _save_video_clip(self, event_type: str, before_frames: list, after_frames: list, recognized_patient_id: str | None = None):
         clip_frames = before_frames + after_frames
         if not clip_frames:
             return
@@ -381,7 +391,7 @@ class FallDetectionModule(BaseModule):
 
         self._upload_clip_to_r2(h264_path)
         self._save_info_in_r2()
-        self._send_api_call(event_type)
+        self._send_api_call(event_type, recognized_patient_id)
 
         for path in (temp_path, h264_path):
             try:
@@ -392,8 +402,8 @@ class FallDetectionModule(BaseModule):
     def _upload_clip_to_r2(self, clip_path: str):
         try:
             name = f"fallen_clip_{int(time.time())}.mp4"
-            with open(clip_path, "rb") as f:
-                self._s3.upload_fileobj(f, self._bucket, name)
+            ##with open(clip_path, "rb") as f:
+                ##self._s3.upload_fileobj(f, self._bucket, name)
             self._video_blob_name = name
             print(f"Uploaded video: {name}")
         except Exception as e:
@@ -417,7 +427,7 @@ class FallDetectionModule(BaseModule):
         except Exception as e:
             print(f"Error uploading incident JSON: {e}")
 
-    def _send_api_call(self, event_type: str):
+    def _send_api_call(self, event_type: str, recognized_patient_id: str | None = None):
         speech_state = {}
         if (self._audio_module and
                 hasattr(self._audio_module, '_speech_module') and
@@ -425,18 +435,17 @@ class FallDetectionModule(BaseModule):
             speech_state = self._audio_module._speech_module.get_state()
 
         payload = {
-            "deviceId":      self._config.device_id,
-            "patientId":     self._config.patient_id,
-            "room":          self._config.room,
-            "eventType":     event_type,
-            "timestamp":     datetime.datetime.now().isoformat(),
-            "videoUrl":      f"{self._r2_public_url}/{self._video_blob_name}",
-            "incidentName":  self._incident_name,
-            "emotion":       speech_state.get('emotion', ''),
-            "distressWord":  speech_state.get('keyword', ''),
-            "confusion":     speech_state.get('confusion', False),
-            "transcript":    speech_state.get('transcript', ''),
+            "deviceId":            self._config.device_id,
+            "patientId":           self._config.patient_id,
+            "recognizedPatientId": recognized_patient_id,
+            "room":                self._config.room,
+            "eventType":           event_type,
+            "timestamp":           datetime.datetime.now().isoformat(),
+            "videoUrl":            f"{self._r2_public_url}/{self._video_blob_name}",
+            "incidentName":        self._incident_name,
         }
+
+        print(payload)
 
         def post_with_retry():
             attempt = 0
@@ -489,11 +498,13 @@ class FallDetectionModule(BaseModule):
 
                 elif cmd == "simulate_recovery":
                     print("[SIM] Recovery simulated via keypress")
+                    recognized_id = self._face_module.get_identity() if self._face_module else None
                     threading.Thread(
                         target=self._save_video_clip,
                         args=("Recovered Fall",
                               list(self._frozen_video_frames_before),
-                              list(self._video_frames_after)),
+                              list(self._video_frames_after),
+                              recognized_id),
                         daemon=True,
                     ).start()
                     self._reset_fall_state()
