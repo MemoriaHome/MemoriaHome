@@ -21,6 +21,7 @@ AI_Models/Fall_Detection_Model/kinect_fall/wav2vec2_checkpoints
 *pyo
 *pyd
 __pycache__
+AI_Models/Fall_Detection_Model/kinect_fall/Recordings/*
 
 # vs code
 .vscode/

@@ -36,8 +36,10 @@ class FallDetectionModule(BaseModule):
 
     def __init__(self, frame_queue: queue.Queue, config: Config,
                  annotated_queue: queue.Queue = None,
-                 command_queue: queue.Queue = None):
+                 command_queue: queue.Queue = None,
+                 verbose: bool = False):
         super().__init__(frame_queue)
+        self._verbose         = verbose
         self._config          = config
         self._annotated_queue = annotated_queue
         self._command_queue   = command_queue
@@ -135,9 +137,10 @@ class FallDetectionModule(BaseModule):
                 ]
 
                 velocity = self._calculate_velocity()
-                print(f"[Body {body_index}] Raw: {height_from_floor:.2f}m | "
-                      f"Abs: {abs_height:.2f}m | "
-                      f"Velocity: {velocity:.2f}m/s")
+                if self._verbose:
+                    print(f"[Body {body_index}] Raw: {height_from_floor:.2f}m | "
+                          f"Abs: {abs_height:.2f}m | "
+                          f"Velocity: {velocity:.2f}m/s")
 
         # Audio state
         audio_distress = False
@@ -165,8 +168,9 @@ class FallDetectionModule(BaseModule):
             else:
                 if self._floor_contact_start is None:
                     self._floor_contact_start = time.time()
-                    print(f"Floor contact but slow descent "
-                          f"({velocity:.2f}m/s) — starting slow-fall timer")
+                if self._verbose:
+                        print(f"Floor contact but slow descent "
+                              f"({velocity:.2f}m/s) — starting slow-fall timer")
 
                 elapsed_floor = time.time() - self._floor_contact_start
                 if elapsed_floor >= self.SLOW_FALL_FLOOR_DURATION:
@@ -193,11 +197,23 @@ class FallDetectionModule(BaseModule):
 
             if abs(height_from_floor) > self.FLOOR_RECOVERED_THRESHOLD:
                 print("Recovery detected.")
-                self._save_video_clip(event_type="Recovered Fall")
+                threading.Thread(
+                    target=self._save_video_clip,
+                    args=("Recovered Fall",
+                          list(self._frozen_video_frames_before),
+                          list(self._video_frames_after)),
+                    daemon=True,
+                ).start()
                 self._reset_fall_state()
             elif elapsed >= self.MIN_ELAPSED_TIME:
                 print("FALL CONFIRMED.")
-                self._save_video_clip(event_type="Unrecovered Fall")
+                threading.Thread(
+                    target=self._save_video_clip,
+                    args=("Unrecovered Fall",
+                          list(self._frozen_video_frames_before),
+                          list(self._video_frames_after)),
+                    daemon=True,
+                ).start()
                 self._reset_fall_state()
 
         # Annotated display
@@ -243,8 +259,9 @@ class FallDetectionModule(BaseModule):
 
             # If lock expired
             if now - self._locked_body_last_seen > BODY_LOCK_TIMEOUT:
-                print(f"[BODY] Lock on body {self._locked_body_index} expired "
-                      f"— releasing")
+                if self._verbose:
+                    print(f"[BODY] Lock on body {self._locked_body_index} expired "
+                          f"— releasing")
                 self._locked_body_index = None
             else:
                 return None
@@ -254,7 +271,8 @@ class FallDetectionModule(BaseModule):
             if bodies.bodies[i].is_tracked:
                 self._locked_body_index     = i
                 self._locked_body_last_seen = now
-                print(f"[BODY] Locked onto body index {i}")
+                if self._verbose:
+                    print(f"[BODY] Locked onto body index {i}")
                 return i
 
         return None
@@ -312,8 +330,8 @@ class FallDetectionModule(BaseModule):
 
     # Video & upload
 
-    def _save_video_clip(self, event_type: str):
-        clip_frames = self._frozen_video_frames_before + self._video_frames_after
+    def _save_video_clip(self, event_type: str, before_frames: list, after_frames: list):
+        clip_frames = before_frames + after_frames
         if not clip_frames:
             return
 
@@ -471,7 +489,13 @@ class FallDetectionModule(BaseModule):
 
                 elif cmd == "simulate_recovery":
                     print("[SIM] Recovery simulated via keypress")
-                    self._save_video_clip(event_type="Recovered Fall")
+                    threading.Thread(
+                        target=self._save_video_clip,
+                        args=("Recovered Fall",
+                              list(self._frozen_video_frames_before),
+                              list(self._video_frames_after)),
+                        daemon=True,
+                    ).start()
                     self._reset_fall_state()
 
                 elif cmd == "simulate_slow_fall" and not self._fallen_state:
