@@ -579,6 +579,38 @@ body {
   overflow: hidden;
 }
 
+.cam-feed-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  background: var(--white);
+  border: 1px solid var(--mint-card);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.cam-feed-selector label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.cam-feed-selector select {
+  min-width: 130px;
+  padding: 6px 10px;
+  border: 1px solid var(--teal-soft);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--text-dark);
+  font-family: var(--font);
+}
+
+.cam-feed-selector select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .cam-device-list {
   margin-bottom: 14px;
   padding: 14px;

@@ -25,6 +25,17 @@ let resolvedAlerts = [];   // acknowledged
 let alertFilter    = 'all';
 let resolvedOpen   = false;
 
+// Camera/WebRTC state
+let signalingSocket = null;
+let cameraDeviceListRequest = null;
+let cameraState = {
+  pc: null,
+  remoteStream: null,
+  deviceId: null,
+  connecting: false,
+  currentStream: 'depth',
+};
+
 // ── TAB SWITCHING ─────────────────────────────────────────────────────────────
 function openTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -186,6 +197,7 @@ function viewPatient(index) {
 }
 
 function closeProfile() {
+  disconnectCamera();
   currentPatient = null;
   openTab('patients');
 }
@@ -462,6 +474,390 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeVideoModal();
 });
 
+// WebRTC live camera
+function setupSignalingSocket() {
+  if (signalingSocket) return signalingSocket;
+
+  signalingSocket = io(API_BASE);
+
+  signalingSocket.on('connect_error', (err) => {
+    console.error('Socket error:', err.message);
+    showBackendCertificateAction('Could not reach the secure backend.');
+  });
+
+  signalingSocket.on('device-list-result', handleCameraDeviceListResult);
+  signalingSocket.on('webrtc-answer', handleWebrtcAnswer);
+  signalingSocket.on('webrtc-ice-candidate', handleRemoteIceCandidate);
+  signalingSocket.on('stream-switch-result', handleStreamSwitchResult);
+  signalingSocket.on('webrtc-error', (payload) => {
+    setCameraStatus('error', cameraErrorText(payload?.reason || 'Signaling failed'));
+  });
+  signalingSocket.on('device-disconnected', (payload) => {
+    if (payload?.deviceId && payload.deviceId === cameraState.deviceId) {
+      disconnectCamera(false);
+      setCameraStatus('error', 'Camera device disconnected.');
+    }
+  });
+
+  return signalingSocket;
+}
+
+function waitForSignalingSocket(timeoutMs = 5000) {
+  const socket = setupSignalingSocket();
+  if (socket.connected) return Promise.resolve(socket);
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('Socket connection timed out'));
+    }, timeoutMs);
+
+    function cleanup() {
+      clearTimeout(timer);
+      socket.off('connect', onConnect);
+      socket.off('connect_error', onError);
+    }
+
+    function onConnect() {
+      cleanup();
+      resolve(socket);
+    }
+
+    function onError(err) {
+      cleanup();
+      reject(err);
+    }
+
+    socket.once('connect', onConnect);
+    socket.once('connect_error', onError);
+  });
+}
+
+async function initCamera() {
+  if (!currentPatient) {
+    setCameraStatus('error', 'Select a patient before opening the camera.');
+    return;
+  }
+
+  if (cameraState.pc || cameraState.connecting) return;
+
+  const patientId = getCurrentPatientId();
+  if (!patientId) {
+    setCameraStatus('error', 'This patient record has no camera identifier.');
+    return;
+  }
+
+  cameraState.connecting = true;
+  setCameraStatus('searching', 'Looking for Kinect devices...');
+
+  try {
+    const socket = await waitForSignalingSocket();
+    const devices = await requestCameraDevices(socket, patientId);
+
+    if (!devices.length) {
+      setCameraStatus('error', 'No Kinect devices are online for this patient.');
+      renderCameraDevices([]);
+      return;
+    }
+
+    renderCameraDevices(devices);
+    await connectCameraDevice(devices[0].deviceId);
+  } catch (err) {
+    console.error('[CAMERA] Failed to initialize:', err);
+    await disconnectCamera(false);
+    setCameraStatus('error', 'Camera signaling is unavailable.');
+    showBackendCertificateAction('Open the backend once, accept the certificate warning, then retry.');
+  } finally {
+    cameraState.connecting = false;
+  }
+}
+
+function requestCameraDevices(socket, patientId) {
+  if (cameraDeviceListRequest) {
+    clearTimeout(cameraDeviceListRequest.timer);
+    cameraDeviceListRequest.reject(new Error('Superseded by a new device request'));
+  }
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cameraDeviceListRequest = null;
+      reject(new Error('Device list timed out'));
+    }, 5000);
+
+    cameraDeviceListRequest = {
+      patientId: String(patientId),
+      resolve,
+      reject,
+      timer,
+    };
+
+    socket.emit('device-list', { patientId: String(patientId) });
+  });
+}
+
+function handleCameraDeviceListResult(payload) {
+  const request = cameraDeviceListRequest;
+  if (!request || String(payload?.patientId) !== request.patientId) return;
+
+  clearTimeout(request.timer);
+  cameraDeviceListRequest = null;
+  request.resolve(payload.devices || []);
+}
+
+function renderCameraDevices(devices) {
+  const list = document.getElementById('cam-device-list');
+  if (!list) return;
+
+  if (!devices.length || devices.length === 1) {
+    list.style.display = 'none';
+    list.innerHTML = '';
+    return;
+  }
+
+  list.style.display = 'block';
+  list.innerHTML =
+    '<div class="cam-device-label">Available Kinect devices</div>' +
+    devices.map((device) => `
+      <button class="cam-device-btn" onclick="connectCameraDevice(${escapeJsStringAttribute(device.deviceId)})">
+        ${escapeHtml(device.room || device.deviceId)} (${escapeHtml(device.deviceId)})
+      </button>
+    `).join('');
+}
+
+async function connectCameraDevice(deviceId) {
+  await disconnectCamera(false);
+
+  const socket = await waitForSignalingSocket();
+  const streamType = normalizeStreamType(document.getElementById('feedSelector')?.value || 'depth');
+  const pc = new RTCPeerConnection({ iceServers: [] });
+  const remoteStream = new MediaStream();
+
+  cameraState.pc = pc;
+  cameraState.remoteStream = remoteStream;
+  cameraState.deviceId = deviceId;
+  cameraState.currentStream = streamType;
+
+  const video = document.getElementById('cam-video');
+  const placeholder = document.getElementById('cam-placeholder');
+  if (video) {
+    video.srcObject = remoteStream;
+    video.style.display = 'block';
+  }
+  if (placeholder) placeholder.style.display = 'none';
+
+  pc.addTransceiver('video', { direction: 'recvonly' });
+  pc.addTransceiver('audio', { direction: 'recvonly' });
+
+  pc.ontrack = (event) => {
+    if (!remoteStream.getTracks().some((track) => track.id === event.track.id)) {
+      remoteStream.addTrack(event.track);
+    }
+    if (video) {
+      video.srcObject = remoteStream;
+      video.play().catch(() => {
+        setCameraStatus('connected', 'Camera connected. Press play to enable audio.');
+      });
+    }
+  };
+
+  pc.onicecandidate = (event) => {
+    socket.emit('webrtc-ice-candidate', {
+      deviceId,
+      candidate: event.candidate ? event.candidate.toJSON() : null,
+    });
+  };
+
+  pc.onconnectionstatechange = () => {
+    const state = pc.connectionState;
+    if (state === 'connected') {
+      setCameraStatus('connected', `Live ${cameraState.currentStream.toUpperCase()} feed connected.`);
+    } else if (state === 'failed' || state === 'disconnected') {
+      setCameraStatus('error', 'Camera connection lost.');
+    } else if (state === 'connecting') {
+      setCameraStatus('searching', 'Connecting to Kinect stream...');
+    }
+  };
+
+  setCameraStatus('searching', 'Starting WebRTC stream...');
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  socket.emit('webrtc-offer', {
+    deviceId,
+    patientId: String(getCurrentPatientId()),
+    viewerId: String(CAREGIVER_ID),
+    streamType,
+    sdp: pc.localDescription.sdp,
+    type: pc.localDescription.type,
+  });
+}
+
+async function handleWebrtcAnswer(payload) {
+  if (!cameraState.pc || payload?.deviceId !== cameraState.deviceId) return;
+  await cameraState.pc.setRemoteDescription({
+    type: payload.type,
+    sdp: payload.sdp,
+  });
+
+  if (payload.streamType) {
+    cameraState.currentStream = normalizeStreamType(payload.streamType);
+    const selector = document.getElementById('feedSelector');
+    if (selector) selector.value = cameraState.currentStream;
+  }
+}
+
+async function handleRemoteIceCandidate(payload) {
+  if (!cameraState.pc || payload?.deviceId !== cameraState.deviceId) return;
+  try {
+    await cameraState.pc.addIceCandidate(payload.candidate || null);
+  } catch (err) {
+    console.warn('[CAMERA] Ignoring remote ICE candidate:', err);
+  }
+}
+
+function requestCameraStreamSwitch(streamType) {
+  const socket = setupSignalingSocket();
+  const normalized = normalizeStreamType(streamType);
+
+  if (!cameraState.pc || !cameraState.deviceId || !socket.connected) {
+    cameraState.currentStream = normalized;
+    return;
+  }
+
+  setCameraStatus('searching', `Switching to ${normalized.toUpperCase()}...`);
+  socket.emit('stream-switch-request', {
+    deviceId: cameraState.deviceId,
+    patientId: String(getCurrentPatientId()),
+    viewerId: String(CAREGIVER_ID),
+    streamType: normalized,
+  });
+}
+
+function handleStreamSwitchResult(payload) {
+  if (payload?.deviceId !== cameraState.deviceId) return;
+
+  const selector = document.getElementById('feedSelector');
+  const activeStream = normalizeStreamType(payload.streamType || cameraState.currentStream);
+  cameraState.currentStream = activeStream;
+  if (selector) selector.value = activeStream;
+
+  if (payload.ok) {
+    setCameraStatus('connected', `Live ${activeStream.toUpperCase()} feed connected.`);
+    return;
+  }
+
+  setCameraStatus('connected', cameraSwitchRejectedText(payload.reason, activeStream));
+}
+
+async function disconnectCamera(notify = true) {
+  const socket = signalingSocket;
+  const deviceId = cameraState.deviceId;
+
+  if (notify && socket?.connected && deviceId) {
+    socket.emit('peer-disconnect', { deviceId });
+  }
+
+  if (cameraState.pc) {
+    cameraState.pc.ontrack = null;
+    cameraState.pc.onicecandidate = null;
+    cameraState.pc.onconnectionstatechange = null;
+    cameraState.pc.close();
+  }
+
+  if (cameraState.remoteStream) {
+    cameraState.remoteStream.getTracks().forEach((track) => track.stop());
+  }
+
+  cameraState = {
+    pc: null,
+    remoteStream: null,
+    deviceId: null,
+    connecting: false,
+    currentStream: normalizeStreamType(document.getElementById('feedSelector')?.value || 'depth'),
+  };
+
+  const video = document.getElementById('cam-video');
+  const placeholder = document.getElementById('cam-placeholder');
+  if (video) {
+    video.pause();
+    video.srcObject = null;
+    video.style.display = 'none';
+  }
+  if (placeholder) placeholder.style.display = 'flex';
+  setCameraStatus('idle', 'Not connected');
+}
+
+function setCameraStatus(state, text) {
+  const dot = document.getElementById('cam-dot');
+  const status = document.getElementById('cam-status-text');
+  const disconnectBtn = document.getElementById('cam-disconnect-btn');
+  const selector = document.getElementById('feedSelector');
+
+  if (dot) {
+    dot.className = 'cam-status-dot';
+    dot.classList.add(`cam-status-dot--${state}`);
+  }
+  if (status) status.textContent = text;
+  if (disconnectBtn) {
+    disconnectBtn.style.display = cameraState.pc ? 'inline-block' : 'none';
+  }
+  if (selector) {
+    selector.disabled = !cameraState.pc;
+  }
+}
+
+function showBackendCertificateAction(message) {
+  const list = document.getElementById('cam-device-list');
+  if (!list) return;
+
+  list.style.display = 'block';
+  list.innerHTML = `
+    <div class="cam-device-label">${escapeHtml(message)}</div>
+    <button class="cam-device-btn" onclick="window.open('${API_BASE}', '_blank', 'noopener')">
+      Open backend certificate page
+    </button>
+    <button class="cam-device-btn" onclick="initCamera()">
+      Retry camera connection
+    </button>
+  `;
+}
+
+function normalizeStreamType(streamType) {
+  const value = String(streamType || 'depth').toLowerCase();
+  if (value === 'infrared') return 'ir';
+  if (value === 'rgb' || value === 'depth' || value === 'ir') return value;
+  return 'depth';
+}
+
+function getCurrentPatientId() {
+  return currentPatient?.patient_id ?? currentPatient?.patientId ?? currentPatient?.id;
+}
+
+function cameraErrorText(reason) {
+  if (reason === 'device_not_found') return 'Selected Kinect device is no longer available.';
+  return 'Camera signaling failed.';
+}
+
+function cameraSwitchRejectedText(reason, activeStream) {
+  if (reason === 'active_alert_required') {
+    return `RGB/IR require an active alert. Staying on ${activeStream.toUpperCase()}.`;
+  }
+  return `Stream switch rejected. Staying on ${activeStream.toUpperCase()}.`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeJsStringAttribute(value) {
+  return JSON.stringify(String(value ?? '')).replace(/"/g, '&quot;');
+}
+
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -476,14 +872,20 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAlerts();
   openTab('home');
 
-  const socket = io('https://localhost:3000');
+  const socket = setupSignalingSocket();
+
+  document.getElementById('feedSelector')?.addEventListener('change', (event) => {
+    requestCameraStreamSwitch(event.target.value);
+  });
+
+  window.addEventListener('beforeunload', () => {
+    disconnectCamera();
+  });
 
   socket.on('connect', () => {
     console.log('Socket connected:', socket.id);
     socket.emit('join-as-caregiver', { caregiverId: CAREGIVER_ID });
   });
-
-  socket.on('connect_error', (err) => console.error('Socket error:', err.message));
 
   socket.on('heartrate', (value) => {
     latestHeartRate = value;

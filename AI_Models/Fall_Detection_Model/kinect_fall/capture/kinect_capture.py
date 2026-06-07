@@ -1,7 +1,12 @@
 import cv2
 import numpy as np
 from pykinect2 import PyKinectRuntime
-from pykinect2.PyKinectV2 import FrameSourceTypes_Color, FrameSourceTypes_Depth, FrameSourceTypes_Body
+from pykinect2.PyKinectV2 import (
+    FrameSourceTypes_Body,
+    FrameSourceTypes_Color,
+    FrameSourceTypes_Depth,
+    FrameSourceTypes_Infrared,
+)
 from shared.frame import KinectFrame
 from shared.frame_bus import FrameBus
 
@@ -15,12 +20,20 @@ class KinectCapture:
     def __init__(self, bus: FrameBus):
         self._bus = bus
         self._kinect = PyKinectRuntime.PyKinectRuntime(
-            FrameSourceTypes_Color | FrameSourceTypes_Depth | FrameSourceTypes_Body
+            FrameSourceTypes_Color
+            | FrameSourceTypes_Depth
+            | FrameSourceTypes_Infrared
+            | FrameSourceTypes_Body
         )
         self.color_w = self._kinect.color_frame_desc.Width
         self.color_h = self._kinect.color_frame_desc.Height
         self.depth_w = self._kinect.depth_frame_desc.Width
         self.depth_h = self._kinect.depth_frame_desc.Height
+        self.infrared_w = self.depth_w
+        self.infrared_h = self.depth_h
+        self._infrared_supported = hasattr(self._kinect, "get_last_infrared_frame")
+        if not self._infrared_supported:
+            print("[KINECT] Infrared frames are not supported by this pykinect2 runtime.")
 
     def run(self) -> None:
         """Blocking capture loop. Run this on the main thread."""
@@ -36,9 +49,15 @@ class KinectCapture:
 
         color = self._get_color()
         depth = self._get_depth()
+        infrared = self._get_infrared()
         body_frame = self._get_body_frame()
 
-        frame = KinectFrame(color=color, depth=depth, body_frame=body_frame)
+        frame = KinectFrame(
+            color=color,
+            depth=depth,
+            infrared=infrared,
+            body_frame=body_frame,
+        )
         self._bus.publish(frame)
 
     def _get_color(self) -> np.ndarray:
@@ -50,6 +69,12 @@ class KinectCapture:
         if self._kinect.has_new_depth_frame():
             raw = self._kinect.get_last_depth_frame()
             return raw.reshape((self.depth_h, self.depth_w))
+        return None
+
+    def _get_infrared(self):
+        if self._infrared_supported and self._kinect.has_new_infrared_frame():
+            raw = self._kinect.get_last_infrared_frame()
+            return raw.reshape((self.infrared_h, self.infrared_w))
         return None
 
     def _get_body_frame(self):

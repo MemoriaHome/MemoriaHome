@@ -18,6 +18,7 @@ from pykinect2.PyKinectV2 import JointType_SpineBase
 
 from modules.base_module import BaseModule
 from shared.config import Config
+from shared.stream_overlay import BodyOverlay, FallOverlay
 from modules.audio_detection import AudioDetectionModule
 
 
@@ -37,6 +38,7 @@ class FallDetectionModule(BaseModule):
     def __init__(self, frame_queue: queue.Queue, config: Config,
                  annotated_queue: queue.Queue = None,
                  command_queue: queue.Queue = None,
+                 stream_overlay_queue: queue.Queue = None,
                  verbose: bool = False,
                  face_module=None):
         super().__init__(frame_queue)
@@ -44,6 +46,7 @@ class FallDetectionModule(BaseModule):
         self._face_module     = face_module
         self._config          = config
         self._annotated_queue = annotated_queue
+        self._stream_overlay_queue = stream_overlay_queue
         self._command_queue   = command_queue
         self._model           = YOLO('yolo models/yolov8n-pose.pt')
 
@@ -250,7 +253,39 @@ class FallDetectionModule(BaseModule):
             except queue.Full:
                 pass
 
+        if self._stream_overlay_queue is not None:
+            self._publish_stream_overlay(r, velocity)
+
     # Body index resolution
+
+    def _publish_stream_overlay(self, result, velocity: float) -> None:
+        bodies = []
+        boxes = getattr(result, "boxes", None)
+        if boxes is not None and getattr(boxes, "xyxy", None) is not None:
+            xyxy = boxes.xyxy.cpu().numpy()
+            conf = boxes.conf.cpu().numpy() if getattr(boxes, "conf", None) is not None else []
+            for i, box in enumerate(xyxy):
+                x1, y1, x2, y2 = [int(v) for v in box[:4]]
+                confidence = float(conf[i]) if i < len(conf) else None
+                bodies.append(BodyOverlay((x1, y1, x2, y2), confidence=confidence))
+
+        floor_timer_seconds = None
+        if self._floor_contact_start is not None and not self._fallen_state:
+            floor_timer_seconds = time.time() - self._floor_contact_start
+
+        overlay = FallOverlay(
+            bodies=bodies,
+            fallen=self._fallen_state,
+            status="STATUS: FALLING" if self._fallen_state else "STATUS: SAFE",
+            velocity=velocity,
+            floor_timer_seconds=floor_timer_seconds,
+            floor_timer_limit=self.SLOW_FALL_FLOOR_DURATION,
+        )
+
+        try:
+            self._stream_overlay_queue.put_nowait(overlay)
+        except queue.Full:
+            pass
 
     def _resolve_body_index(self, bodies) -> int | None:
         BODY_LOCK_TIMEOUT = 3.0

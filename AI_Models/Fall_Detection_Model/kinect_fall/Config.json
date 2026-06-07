@@ -3,5 +3,10 @@
   "patient_id": "5",
   "room": "Living Room",
   "backend_url": "https://localhost:3000",
+  "signaling_url": "https://localhost:3000",
+  "kinect_audio_device": null,
+  "stream_width": 960,
+  "stream_height": 540,
+  "stream_fps": 15,
   "recording_path": "C:\\MyGit\\MemoriaHome\\AI_Models\\Fall_Detection_Model\\kinect_fall\\Recordings"
 }

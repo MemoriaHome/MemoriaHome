@@ -197,15 +197,15 @@
 
           <div class="cam-feed-selector">
             <label for="feedSelector">Camera Feed:</label>
-               <select id="feedSelector">
-                 <option value="RGB">RGB</option>
-                 <option value="IR">Infrared</option>
-                 <option value="Depth">Depth</option>
+               <select id="feedSelector" disabled>
+                 <option value="depth" selected>Depth</option>
+                 <option value="rgb">RGB</option>
+                 <option value="ir">Infrared</option>
                </select>
           </div>
 
           <!-- Video element shown during call -->
-          <video id="cam-video" autoplay playsinline style="display:none; width:100%; border-radius:var(--radius);"></video>
+          <video id="cam-video" autoplay playsinline controls style="display:none; width:100%; border-radius:var(--radius);"></video>
         </div>
 
       </div>

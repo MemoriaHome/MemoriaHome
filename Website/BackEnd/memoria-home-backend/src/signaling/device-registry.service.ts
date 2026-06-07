@@ -2,10 +2,11 @@ import { Injectable } from '@nestjs/common';
 
 export interface RegisteredDevice {
   deviceId: string;
-  patientId: string;
+  patientIds: string[];
   room: string;
   socketId: string;
   connectedAt: Date;
+  streams: string[];
 }
 
 @Injectable()
@@ -14,7 +15,7 @@ export class DeviceRegistryService {
 
   register(device: RegisteredDevice): void {
     this.devices.set(device.deviceId, device);
-    console.log(`[DeviceRegistry] Registered device: ${device.deviceId} for patient ${device.patientId} in "${device.room}"`);
+    console.log(`[DeviceRegistry] Registered device: ${device.deviceId} for patients ${device.patientIds.join(', ')} in "${device.room}"`);
   }
 
   unregister(socketId: string): RegisteredDevice | undefined {
@@ -29,7 +30,7 @@ export class DeviceRegistryService {
   }
 
   getByPatientId(patientId: string): RegisteredDevice[] {
-    return [...this.devices.values()].filter(d => d.patientId === patientId);
+    return [...this.devices.values()].filter(d => d.patientIds.includes(patientId));
   }
 
   getByDeviceId(deviceId: string): RegisteredDevice | undefined {

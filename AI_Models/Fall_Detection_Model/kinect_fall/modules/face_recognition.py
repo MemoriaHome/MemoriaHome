@@ -174,11 +174,16 @@ class FaceRecognitionModule(BaseModule):
         self,
         frame_queue: queue.Queue,
         config,
-        face_results_queue: queue.Queue = None,
+        face_results_queue: queue.Queue | list[queue.Queue] = None,
     ):
         super().__init__(frame_queue)
         self._config = config
-        self._face_results_queue = face_results_queue
+        if isinstance(face_results_queue, list):
+            self._face_results_queues = face_results_queue
+        elif face_results_queue is not None:
+            self._face_results_queues = [face_results_queue]
+        else:
+            self._face_results_queues = []
         self._bucket = os.getenv("R2_BUCKET")
 
         self._s3 = boto3.client(
@@ -292,9 +297,9 @@ class FaceRecognitionModule(BaseModule):
             self._tracker,
         )
 
-        if self._face_results_queue is not None:
+        for result_queue in self._face_results_queues:
             try:
-                self._face_results_queue.put_nowait(results)
+                result_queue.put_nowait(results)
             except queue.Full:
                 pass
 

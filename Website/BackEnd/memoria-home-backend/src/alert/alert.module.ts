@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { AlertController } from './alert.controller';
+import { ActiveAlertsController, AlertController } from './alert.controller';
 import { AlertService } from './alert.service';
 import { CaregiverModule } from '../caregiver/caregiver.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -14,7 +14,7 @@ import { GatewayModule } from '../signaling/signaling.module';
     CaregiverModule,
     TypeOrmModule.forFeature([Patient, Alert, PatientAlert]),
   ],
-  controllers: [AlertController],
+  controllers: [AlertController, ActiveAlertsController],
   providers: [AlertService],
   exports: [AlertService],
 })

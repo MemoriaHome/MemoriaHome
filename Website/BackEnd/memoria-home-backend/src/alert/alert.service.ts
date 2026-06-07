@@ -144,4 +144,30 @@ export class AlertService {
       acknowledgedAt: pa.acknowledged_at,
     }));
   }
+
+  async getActiveAlertState(patientId: number): Promise<object> {
+    if (!Number.isFinite(patientId)) {
+      return { active: false, alerts: [] };
+    }
+
+    const rows = await this.patientAlertRepo
+      .createQueryBuilder('pa')
+      .innerJoinAndSelect('pa.alert', 'a')
+      .where('pa.patient_id = :patientId', { patientId })
+      .andWhere('pa.acknowledged = false')
+      .orderBy('a.timestamp', 'DESC')
+      .getMany();
+
+    return {
+      active: rows.length > 0,
+      alerts: rows.map((pa) => ({
+        alertId: pa.alert.alert_id,
+        patientId: pa.patient_id,
+        eventType: pa.alert.event,
+        room: pa.alert.room,
+        timestamp: pa.alert.timestamp,
+        severity: 'critical',
+      })),
+    };
+  }
 }
