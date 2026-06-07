@@ -33,7 +33,7 @@ class WebRTCSessionManager:
     async def handle_offer(self, payload: dict) -> None:
         viewer_socket_id = payload["viewerSocketId"]
         requested_stream = self._normalize_stream(payload.get("streamType", "depth"))
-        initial_stream = await self._authorized_stream(requested_stream)
+        initial_stream = await self._authorized_stream(requested_stream, payload)
 
         pc = RTCPeerConnection(
             RTCConfiguration(iceServers=[]),
@@ -100,7 +100,7 @@ class WebRTCSessionManager:
                 "ok": False,
                 "requestedStreamType": requested_stream,
                 "streamType": initial_stream,
-                "reason": "active_alert_required",
+                "reason": "break_glass_required",
             })
 
     async def handle_remote_candidate(self, payload: dict) -> None:
@@ -129,13 +129,13 @@ class WebRTCSessionManager:
             await self._emit_switch_result(payload, False, requested_stream, None, "session_not_found")
             return
 
-        if not await self._is_stream_allowed(requested_stream):
+        if not await self._is_stream_allowed(requested_stream, payload):
             await self._emit_switch_result(
                 payload,
                 False,
                 requested_stream,
                 session["stream"],
-                "active_alert_required",
+                "break_glass_required",
             )
             return
 
@@ -176,30 +176,39 @@ class WebRTCSessionManager:
             "reason": reason,
         })
 
-    async def _authorized_stream(self, requested_stream: str) -> str:
-        if await self._is_stream_allowed(requested_stream):
+    async def _authorized_stream(self, requested_stream: str, payload: dict) -> str:
+        if await self._is_stream_allowed(requested_stream, payload):
             return requested_stream
         return "depth"
 
-    async def _is_stream_allowed(self, stream_type: str) -> bool:
+    async def _is_stream_allowed(self, stream_type: str, payload: dict) -> bool:
         if stream_type == "depth":
             return True
 
-        def fetch_active_state() -> bool:
+        break_glass_token = payload.get("breakGlassToken")
+        if not break_glass_token:
+            return False
+
+        def verify_break_glass_token() -> bool:
             try:
-                response = requests.get(
-                    f"{self._config.backend_url}/alerts/active",
-                    params={"patient_id": self._config.patient_id},
+                response = requests.post(
+                    f"{self._config.backend_url}/auth/break-glass/verify",
+                    json={
+                        "token": break_glass_token,
+                        "caregiverId": payload.get("viewerId"),
+                        "patientId": payload.get("patientId", self._config.patient_id),
+                        "streamType": stream_type,
+                    },
                     timeout=5,
                     verify=False,
                 )
                 response.raise_for_status()
-                return bool(response.json().get("active"))
+                return bool(response.json().get("valid"))
             except Exception as exc:
-                print(f"[WEBRTC] Active-alert check failed: {exc}")
+                print(f"[WEBRTC] Break-glass verification failed: {exc}")
                 return False
 
-        return await asyncio.to_thread(fetch_active_state)
+        return await asyncio.to_thread(verify_break_glass_token)
 
     @staticmethod
     def _normalize_stream(stream_type: str) -> str:

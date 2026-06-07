@@ -6,10 +6,11 @@ import { Patient } from '../entities/patient.entity';
 import { User } from '../entities/user.entity';
 import { PatientCaregiver } from '../entities/patientToCaregiver.entity';
 import { Caregiver } from '../entities/caregiver.entity';
+import { BreakGlassAccessLog } from '../entities/break_glass_access_log.entity';
 
  
 @Module({
-  imports: [TypeOrmModule.forFeature([Patient, User, PatientCaregiver, Caregiver])],
+  imports: [TypeOrmModule.forFeature([Patient, User, PatientCaregiver, Caregiver, BreakGlassAccessLog])],
   controllers: [AdminController],
   providers: [AdminService],
 })

@@ -260,7 +260,8 @@ body {
   color: var(--text);
 }
 
-.patient-count {
+.patient-count,
+.security-count {
   background: rgba(45, 212, 191, 0.12);
   color: var(--teal);
   font-size: 12px;
@@ -329,6 +330,31 @@ tbody td {
   font-weight: 500;
   background: rgba(251, 191, 36, 0.12);
   color: var(--warning);
+}
+
+.stream-badge {
+  display: inline-block;
+  min-width: 44px;
+  text-align: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(167, 139, 250, 0.12);
+  color: #c4b5fd;
+}
+
+.reason-cell {
+  min-width: 260px;
+  max-width: 460px;
+  white-space: normal;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.muted-inline {
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .action-btn {

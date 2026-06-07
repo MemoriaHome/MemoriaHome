@@ -130,7 +130,34 @@
   <div id="alerts"   class="tab-content"></div>
   <div id="doctors"  class="tab-content"></div>
   <div id="reports"  class="tab-content"></div>
-  <div id="security" class="tab-content"></div>
+  <div id="security" class="tab-content">
+    <div class="page-header">
+      <h2>Security</h2>
+      <p>Review emergency break-glass access to identifiable live streams</p>
+    </div>
+
+    <div class="table-card">
+      <div class="table-card-header">
+        <h3>Break-Glass Access Logs</h3>
+        <span class="security-count" id="breakglass-count">0 logs</span>
+      </div>
+      <div class="table-wrapper">
+        <table id="breakglass-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Timestamp</th>
+              <th>Caregiver</th>
+              <th>Patient</th>
+              <th>Stream</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="breakglass-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
 </div>
 

@@ -56,4 +56,11 @@ export class AdminController {
     return this.adminService.getAllCaregivers();
   }
 
+//==========Security==========
+
+  @Get('break-glass-logs')
+  getBreakGlassAccessLogs() {
+    return this.adminService.getBreakGlassAccessLogs();
+  }
+
 }

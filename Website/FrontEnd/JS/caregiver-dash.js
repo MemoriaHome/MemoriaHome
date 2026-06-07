@@ -35,6 +35,7 @@ let cameraState = {
   connecting: false,
   currentStream: 'depth',
 };
+let breakGlassTokens = new Map();
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────────────────
 function openTab(tabName) {
@@ -629,6 +630,7 @@ async function connectCameraDevice(deviceId) {
 
   const socket = await waitForSignalingSocket();
   const streamType = normalizeStreamType(document.getElementById('feedSelector')?.value || 'depth');
+  const breakGlassToken = await getBreakGlassTokenForStream(streamType);
   const pc = new RTCPeerConnection({ iceServers: [] });
   const remoteStream = new MediaStream();
 
@@ -687,6 +689,7 @@ async function connectCameraDevice(deviceId) {
     patientId: String(getCurrentPatientId()),
     viewerId: String(CAREGIVER_ID),
     streamType,
+    breakGlassToken,
     sdp: pc.localDescription.sdp,
     type: pc.localDescription.type,
   });
@@ -715,12 +718,23 @@ async function handleRemoteIceCandidate(payload) {
   }
 }
 
-function requestCameraStreamSwitch(streamType) {
+async function requestCameraStreamSwitch(streamType) {
   const socket = setupSignalingSocket();
   const normalized = normalizeStreamType(streamType);
+  const previousStream = cameraState.currentStream;
 
   if (!cameraState.pc || !cameraState.deviceId || !socket.connected) {
     cameraState.currentStream = normalized;
+    return;
+  }
+
+  let breakGlassToken = null;
+  try {
+    breakGlassToken = await getBreakGlassTokenForStream(normalized);
+  } catch (err) {
+    const selector = document.getElementById('feedSelector');
+    if (selector) selector.value = previousStream;
+    setCameraStatus('connected', `Staying on ${previousStream.toUpperCase()}.`);
     return;
   }
 
@@ -730,6 +744,7 @@ function requestCameraStreamSwitch(streamType) {
     patientId: String(getCurrentPatientId()),
     viewerId: String(CAREGIVER_ID),
     streamType: normalized,
+    breakGlassToken,
   });
 }
 
@@ -822,6 +837,58 @@ function showBackendCertificateAction(message) {
   `;
 }
 
+async function getBreakGlassTokenForStream(streamType) {
+  const normalized = normalizeStreamType(streamType);
+  if (normalized === 'depth') return null;
+
+  const patientId = getCurrentPatientId();
+  const cacheKey = `${patientId}:${normalized}`;
+  const cached = breakGlassTokens.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() + 15_000) {
+    return cached.token;
+  }
+
+  const password = window.prompt(
+    `EMERGENCY BREAK-GLASS ACCESS\n\n` +
+    `${normalized.toUpperCase()} contains identifiable live video and is intended for emergencies only.\n` +
+    `Enter your caregiver password to continue.`
+  );
+  if (password === null) {
+    throw new Error('Break-glass authentication cancelled');
+  }
+
+  const reason = window.prompt(
+    'Emergency reason for break-glass access',
+    'Emergency live safety assessment'
+  );
+  if (reason === null) {
+    throw new Error('Break-glass reason cancelled');
+  }
+
+  const response = await fetch(`${API_BASE}/auth/break-glass`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      caregiverId: CAREGIVER_ID,
+      patientId,
+      streamType: normalized,
+      password,
+      reason,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Break-glass authentication failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  breakGlassTokens.set(cacheKey, {
+    token: data.token,
+    expiresAt: Date.now() + ((data.expiresInSeconds || 300) * 1000),
+  });
+  return data.token;
+}
+
 function normalizeStreamType(streamType) {
   const value = String(streamType || 'depth').toLowerCase();
   if (value === 'infrared') return 'ir';
@@ -839,6 +906,9 @@ function cameraErrorText(reason) {
 }
 
 function cameraSwitchRejectedText(reason, activeStream) {
+  if (reason === 'break_glass_required') {
+    return `RGB/IR are emergency-only streams and require break-glass authentication. Staying on ${activeStream.toUpperCase()}.`;
+  }
   if (reason === 'active_alert_required') {
     return `RGB/IR require an active alert. Staying on ${activeStream.toUpperCase()}.`;
   }

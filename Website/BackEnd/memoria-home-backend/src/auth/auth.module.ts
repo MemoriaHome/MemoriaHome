@@ -7,9 +7,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CaregiverModule } from '../caregiver/caregiver.module';
 import { AuthController } from './auth.controller';
 import { User } from '../entities/user.entity';
+import { BreakGlassAccessLog } from '../entities/break_glass_access_log.entity';
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Caregiver,User]),
+    TypeOrmModule.forFeature([Caregiver,User,BreakGlassAccessLog]),
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'superSecretKey', // Use env variable in production

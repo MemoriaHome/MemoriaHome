@@ -6,6 +6,10 @@ function selectTab(element, tabId) {
   document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
   const selectedTab = document.getElementById(tabId);
   if (selectedTab) selectedTab.classList.add('active');
+
+  if (tabId === 'security') {
+    loadBreakGlassLogs();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -21,6 +25,7 @@ const API_BASE = 'https://localhost:3000';
 
 let patients      = [];
 let allCaregivers = [];
+let breakGlassLogs = [];
 
 // LOAD EXISTING PATIENTS FROM DB
 async function loadPatients() {
@@ -304,8 +309,102 @@ async function unassignCaregiver(patientId, caregiverId, btnEl) {
   }
 }
 
+// -------------------- SECURITY / BREAK-GLASS LOGS --------------------
+
+async function loadBreakGlassLogs() {
+  const tbody = document.getElementById('breakglass-tbody');
+  if (tbody) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6">
+          <div class="empty-state">
+            <p>Loading break-glass logs...</p>
+          </div>
+        </td>
+      </tr>`;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/administrator/break-glass-logs`);
+    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+    breakGlassLogs = await response.json();
+    renderBreakGlassLogs();
+  } catch (error) {
+    console.error('Could not load break-glass logs:', error);
+    if (tbody) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6">
+            <div class="empty-state">
+              <p>Could not load break-glass logs.</p>
+            </div>
+          </td>
+        </tr>`;
+    }
+  }
+}
+
+function renderBreakGlassLogs() {
+  const tbody = document.getElementById('breakglass-tbody');
+  const countEl = document.getElementById('breakglass-count');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+
+  if (countEl) {
+    countEl.textContent = breakGlassLogs.length === 1 ? '1 log' : `${breakGlassLogs.length} logs`;
+  }
+
+  if (!breakGlassLogs.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6">
+          <div class="empty-state">
+            <div class="empty-icon">Security</div>
+            <p>No break-glass access has been logged yet.</p>
+          </div>
+        </td>
+      </tr>`;
+    return;
+  }
+
+  breakGlassLogs.forEach((log) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td><span class="id-pill">${escapeHtml(log.logId ?? '-')}</span></td>
+      <td>${escapeHtml(formatDateTime(log.timestamp))}</td>
+      <td>${escapeHtml(log.caregiverName || 'Unknown')} <span class="muted-inline">#${escapeHtml(log.caregiverId ?? '-')}</span></td>
+      <td>${escapeHtml(log.patientName || 'Unknown')} <span class="muted-inline">#${escapeHtml(log.patientId ?? '-')}</span></td>
+      <td><span class="stream-badge">${escapeHtml(String(log.accessedStream || '').toUpperCase())}</span></td>
+      <td class="reason-cell">${escapeHtml(log.reason || '-')}</td>`;
+    tbody.appendChild(row);
+  });
+}
+
 function getRiskColor(risk) {
   if (risk === 'HIGH') return 'red';
   if (risk === 'MID')  return 'orange';
   return 'green';
+}
+
+function formatDateTime(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

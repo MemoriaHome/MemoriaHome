@@ -6,6 +6,7 @@ import { User } from '../entities/user.entity';
 import { Caregiver } from '../entities/caregiver.entity';
 import { PatientCaregiver } from '../entities/patientToCaregiver.entity';
 import { OnboardPatientDto } from '../patient/dto/onboard-patient.dto';
+import { BreakGlassAccessLog } from '../entities/break_glass_access_log.entity';
 
 @Injectable()
 export class AdminService {
@@ -22,6 +23,9 @@ export class AdminService {
 
     @InjectRepository(Caregiver)
     private caregiverRepo: Repository<Caregiver>,
+
+    @InjectRepository(BreakGlassAccessLog)
+    private breakGlassAccessLogRepo: Repository<BreakGlassAccessLog>,
   ) {}
 
   //==============PATIENTS==============
@@ -121,6 +125,31 @@ export class AdminService {
       where:     { caregiver_id: caregiverId },
       relations: ['patient'],
     });
+  }
+
+  //==============SECURITY==============
+
+  async getBreakGlassAccessLogs() {
+    const logs = await this.breakGlassAccessLogRepo.find({
+      relations: ['caregiver', 'patient'],
+      order: { timestamp: 'DESC' },
+      take: 100,
+    });
+
+    return logs.map((log) => ({
+      logId: log.break_glass_access_log_id,
+      caregiverId: log.caregiver_id,
+      caregiverName: log.caregiver
+        ? `${log.caregiver.first_name} ${log.caregiver.last_name}`
+        : 'Unknown',
+      patientId: log.patient_id,
+      patientName: log.patient
+        ? `${log.patient.first_name} ${log.patient.last_name}`
+        : 'Unknown',
+      reason: log.reason,
+      accessedStream: log.accessed_stream,
+      timestamp: log.timestamp,
+    }));
   }
 
 }

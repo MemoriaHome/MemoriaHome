@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { CreateCaregiverDto } from '../caregiver/dto/create-caregiver.dto'
 import { CreateUserDto } from '../Common/create-user.dto'
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Caregiver } from '../entities/caregiver.entity';
 import { User } from '../entities/user.entity'
+import { BreakGlassAccessLog } from '../entities/break_glass_access_log.entity';
 import * as bcrypt from 'bcrypt';
 import { CaregiverService } from '../caregiver/caregiver.service';
 import { JwtService } from '@nestjs/jwt';
@@ -19,6 +20,9 @@ export class AuthService {
 
     @InjectRepository(User)
     private userRepository: Repository<User>,
+
+    @InjectRepository(BreakGlassAccessLog)
+    private breakGlassAccessLogRepository: Repository<BreakGlassAccessLog>,
 
     private jwtService: JwtService,
   ) {}
@@ -90,4 +94,124 @@ export class AuthService {
       }
       return target
     }
+
+  async requestBreakGlassAccess(body: {
+    caregiverId: number | string;
+    patientId: number | string;
+    streamType: string;
+    password: string;
+    reason?: string;
+  }) {
+    const streamType = this.normalizeBreakGlassStream(body.streamType);
+    const caregiverId = String(body.caregiverId ?? '');
+    const patientId = String(body.patientId ?? '');
+
+    if (
+      !Number.isFinite(Number(caregiverId)) ||
+      !Number.isFinite(Number(patientId))
+    ) {
+      throw new BadRequestException('caregiverId and patientId are required');
+    }
+
+    if (streamType === 'depth') {
+      throw new BadRequestException('Break-glass authentication is only required for RGB/IR');
+    }
+
+    const authenticated = await this.verifyBreakGlassCredentials(
+      caregiverId,
+      body.password,
+    );
+    if (!authenticated) {
+      throw new UnauthorizedException('Break-glass authentication failed');
+    }
+
+    await this.logBreakGlassAccess(caregiverId, patientId, streamType, body.reason);
+
+    const expiresInSeconds = 5 * 60;
+    const token = this.jwtService.sign(
+      {
+        purpose: 'break-glass-stream',
+        caregiverId,
+        patientId,
+        streamType,
+        reason: body.reason ?? null,
+      },
+      { expiresIn: expiresInSeconds },
+    );
+
+    return {
+      token,
+      expiresInSeconds,
+      streamType,
+    };
   }
+
+  async verifyBreakGlassAccess(body: {
+    token: string;
+    caregiverId: number | string;
+    patientId: number | string;
+    streamType: string;
+  }) {
+    try {
+      const payload = this.jwtService.verify(body.token);
+      const streamType = this.normalizeBreakGlassStream(body.streamType);
+
+      const valid =
+        payload?.purpose === 'break-glass-stream' &&
+        payload?.caregiverId === String(body.caregiverId ?? '') &&
+        payload?.patientId === String(body.patientId ?? '') &&
+        payload?.streamType === streamType &&
+        streamType !== 'depth';
+
+      return { valid };
+    } catch {
+      return { valid: false };
+    }
+  }
+
+  private async verifyBreakGlassCredentials(
+    caregiverId: string,
+    password: string,
+  ): Promise<boolean> {
+    const numericCaregiverId = Number(caregiverId);
+    if (!Number.isFinite(numericCaregiverId) || !password) {
+      return false;
+    }
+
+    const caregiver = await this.caregiverRepository.findOne({
+      relations: ['user'],
+      where: { caregiver_id: numericCaregiverId },
+    });
+
+    if (!caregiver?.user || caregiver.user.role !== 'caregiver') {
+      return false;
+    }
+
+    return bcrypt.compare(password, caregiver.user.pass);
+  }
+
+  private async logBreakGlassAccess(
+    caregiverId: string,
+    patientId: string,
+    streamType: string,
+    reason?: string,
+  ): Promise<void> {
+    const log = this.breakGlassAccessLogRepository.create({
+      caregiver_id: Number(caregiverId),
+      patient_id: Number(patientId),
+      reason: reason?.trim() || 'Emergency break-glass access',
+      accessed_stream: streamType,
+    });
+
+    await this.breakGlassAccessLogRepository.save(log);
+  }
+
+  private normalizeBreakGlassStream(streamType: string): string {
+    const normalized = String(streamType || '').toLowerCase();
+    if (normalized === 'infrared') return 'ir';
+    if (normalized === 'rgb' || normalized === 'ir' || normalized === 'depth') {
+      return normalized;
+    }
+    throw new BadRequestException('Unsupported streamType');
+  }
+}

@@ -19,4 +19,25 @@ login(@Body() userlogindto: UserLoginDto){
   return this.authService.login(userlogindto);
 }
 
+@Post('break-glass')
+requestBreakGlassAccess(@Body() body: {
+  caregiverId: number | string;
+  patientId: number | string;
+  streamType: string;
+  password: string;
+  reason?: string;
+}) {
+  return this.authService.requestBreakGlassAccess(body);
+}
+
+@Post('break-glass/verify')
+verifyBreakGlassAccess(@Body() body: {
+  token: string;
+  caregiverId: number | string;
+  patientId: number | string;
+  streamType: string;
+}) {
+  return this.authService.verifyBreakGlassAccess(body);
+}
+
 }
