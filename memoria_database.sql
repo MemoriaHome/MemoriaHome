@@ -127,3 +127,27 @@ CREATE TABLE patient_alerts (
 
 CREATE INDEX idx_patient_alerts_patient ON patient_alerts(patient_id);
 CREATE INDEX idx_patient_alerts_alert ON patient_alerts(alert_id);
+
+CREATE TABLE break_glass_access_logs (
+    break_glass_access_log_id SERIAL PRIMARY KEY,
+
+    caregiver_id INTEGER NOT NULL REFERENCES caregivers(caregiver_id) ON DELETE CASCADE,
+    patient_id INTEGER NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+
+    reason TEXT NOT NULL,
+    accessed_stream VARCHAR(20) NOT NULL CHECK (accessed_stream IN ('rgb', 'ir')),
+
+    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_break_glass_logs_caregiver
+ON break_glass_access_logs(caregiver_id);
+
+CREATE INDEX idx_break_glass_logs_patient
+ON break_glass_access_logs(patient_id);
+
+CREATE INDEX idx_break_glass_logs_timestamp
+ON break_glass_access_logs(timestamp DESC);
+
+CREATE INDEX idx_break_glass_logs_patient_timestamp
+ON break_glass_access_logs(patient_id, timestamp DESC);
