@@ -1,16 +1,10 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+ import { Controller, Get, Patch, Param, Delete, Body } from '@nestjs/common';
 import { CaregiverService } from './caregiver.service';
-import { CreateCaregiverDto } from './dto/create-caregiver.dto';
 import { UpdateCaregiverDto } from './dto/update-caregiver.dto';
 
 @Controller('caregiver')
 export class CaregiverController {
   constructor(private readonly caregiverService: CaregiverService) {}
-
-  @Post()
-  create(@Body() createCaregiverDto: CreateCaregiverDto) {
-    return this.caregiverService.create(createCaregiverDto);
-  }
 
   @Get()
   findAll() {
@@ -32,3 +26,4 @@ export class CaregiverController {
     return this.caregiverService.remove(+id);
   }
 }
+

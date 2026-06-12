@@ -1,27 +1,27 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
-@Entity('caregivers') //table name in the database
+@Entity('caregivers')
 export class Caregiver {
 
     @PrimaryGeneratedColumn()
-    caregiver_id: number;
+    caregiver_id!: number;
 
     @Column()
-    first_name: string;
+    first_name!: string;
 
     @Column()
-    last_name: string;
+    last_name!: string;
 
     @Column()
-    phone: string;
+    phone!: string;
 
     @Column()
-    specialization: string;
+    specialization!: string;
 
     @Column()
-    license_number: string;
+    license_number!: string;
 
     @Column()
-    years_experience: number;
-
+    years_experience!: number;
 }
+
