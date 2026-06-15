@@ -1,8 +1,8 @@
 import { Controller,Post, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateCaregiverDto } from '../caregiver/dto/create-caregiver.dto';
-import { CreateUserDto } from '../Common/create-user.dto';
 import { UserLoginDto } from '../Common/userlogin.dto'
+import { EnrollDomainDto } from './dto/enroll-domain.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -12,6 +12,11 @@ export class AuthController {
 signup(@Body() createCaregiverDto: CreateCaregiverDto) {
   return this.authService.signup(createCaregiverDto);
   }
+
+@Post('enroll-domain')
+enrollDomain(@Body() dto: EnrollDomainDto) {
+  return this.authService.enrollDomain(dto);
+}
 
 @Post('login')
 login(@Body() userlogindto: UserLoginDto){

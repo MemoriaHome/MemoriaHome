@@ -184,7 +184,7 @@ class FaceRecognitionModule(BaseModule):
             self._face_results_queues = [face_results_queue]
         else:
             self._face_results_queues = []
-        self._bucket = os.getenv("R2_BUCKET")
+        self._bucket = os.getenv("R2_BUCKET_FACE")
 
         self._s3 = boto3.client(
             service_name="s3",

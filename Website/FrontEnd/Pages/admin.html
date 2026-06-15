@@ -36,7 +36,133 @@
   </div>
 
   <!-- TABS -->
-  <div id="users" class="tab-content"></div>
+  <div id="users" class="tab-content">
+    <div class="page-header">
+      <h2>User Management</h2>
+      <p id="domain-label">Workspace</p>
+    </div>
+
+    <div class="form-card">
+      <h3>Create Caregiver</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="caregiver_first_name">First Name <span class="required">*</span></label>
+          <input type="text" id="caregiver_first_name" placeholder="e.g. Sara">
+        </div>
+        <div class="form-group">
+          <label for="caregiver_last_name">Last Name <span class="required">*</span></label>
+          <input type="text" id="caregiver_last_name" placeholder="e.g. Amin">
+        </div>
+        <div class="form-group">
+          <label for="caregiver_email">Email <span class="required">*</span></label>
+          <input type="email" id="caregiver_email" placeholder="caregiver@example.com">
+        </div>
+        <div class="form-group">
+          <label for="caregiver_password">Password <span class="required">*</span></label>
+          <input type="password" id="caregiver_password" placeholder="Minimum 8 characters">
+        </div>
+        <div class="form-group">
+          <label for="caregiver_phone">Phone <span class="required">*</span></label>
+          <input type="text" id="caregiver_phone" placeholder="Phone number">
+        </div>
+        <div class="form-group">
+          <label for="caregiver_specialization">Specialization <span class="required">*</span></label>
+          <input type="text" id="caregiver_specialization" placeholder="e.g. Nurse">
+        </div>
+        <div class="form-group">
+          <label for="caregiver_license_number">License Number</label>
+          <input type="text" id="caregiver_license_number" placeholder="Optional">
+        </div>
+        <div class="form-group">
+          <label for="caregiver_years_experience">Years Experience <span class="required">*</span></label>
+          <input type="number" id="caregiver_years_experience" min="0" max="255" placeholder="0">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-primary" onclick="createCaregiver()">Create Caregiver</button>
+        <button class="btn-ghost" onclick="clearCaregiverForm()">Clear</button>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <h3>Create Admin</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="admin_first_name">First Name <span class="required">*</span></label>
+          <input type="text" id="admin_first_name" placeholder="e.g. Mona">
+        </div>
+        <div class="form-group">
+          <label for="admin_last_name">Last Name <span class="required">*</span></label>
+          <input type="text" id="admin_last_name" placeholder="e.g. Hassan">
+        </div>
+        <div class="form-group">
+          <label for="admin_email">Email <span class="required">*</span></label>
+          <input type="email" id="admin_email" placeholder="admin@example.com">
+        </div>
+        <div class="form-group">
+          <label for="admin_password">Password <span class="required">*</span></label>
+          <input type="password" id="admin_password" placeholder="Minimum 8 characters">
+        </div>
+        <div class="form-group">
+          <label for="admin_phone">Phone <span class="required">*</span></label>
+          <input type="text" id="admin_phone" placeholder="Phone number">
+        </div>
+        <div class="form-group">
+          <label for="admin_job_title">Job Title</label>
+          <input type="text" id="admin_job_title" placeholder="Administrator">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-primary" onclick="createAdmin()">Create Admin</button>
+        <button class="btn-ghost" onclick="clearAdminForm()">Clear</button>
+      </div>
+    </div>
+
+    <div class="management-grid">
+      <div class="table-card">
+        <div class="table-card-header">
+          <h3>Caregivers</h3>
+          <span class="patient-count" id="caregiver-count">0 caregivers</span>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Specialization</th>
+                <th>License</th>
+                <th>Experience</th>
+              </tr>
+            </thead>
+            <tbody id="caregivers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <h3>Admins</h3>
+          <span class="patient-count" id="admin-count">0 admins</span>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Job Title</th>
+                <th>User ID</th>
+              </tr>
+            </thead>
+            <tbody id="admins-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div id="patients" class="tab-content">
     <div class="page-header">
@@ -90,6 +216,10 @@
         <div class="form-group address-field">
           <label for="address">Address</label>
           <input type="text" id="address" placeholder="Street, City, Country">
+        </div>
+        <div class="form-group">
+          <label for="relationship">Relationship</label>
+          <input type="text" id="relationship" placeholder="For family domains">
         </div>
       </div>
       <div class="form-actions">

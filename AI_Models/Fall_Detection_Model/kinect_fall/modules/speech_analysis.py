@@ -4,9 +4,14 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import queue
 import threading
 import time
+import datetime
 import numpy as np
 import torch
 import torchaudio
+import requests
+
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from speechbrain.inference.classifiers import EncoderClassifier
 from speechbrain.inference.VAD import VAD
@@ -58,7 +63,11 @@ class SpeechAnalysisModule:
         self.confusion_detected  = False
         self.speech_active       = False
         self.transcript          = ""
-        self._stutter_module = None
+        self._stutter_module     = None
+
+        # cooldown: only alert once per keyword per window
+        self._alert_cooldown     = {}
+        self._ALERT_COOLDOWN_SEC = 60
 
         self._load_models()
 
@@ -69,7 +78,6 @@ class SpeechAnalysisModule:
         print("[SPEECH] Loading SpeechBrain models...")
 
         # emotion recognition
-        # trained on iemocap: detects anger, sadness, fear, neutral etc
         try:
             self._emotion_classifier = EncoderClassifier.from_hparams(
                 source="speechbrain/emotion-recognition-wav2vec2-IEMOCAP",
@@ -82,7 +90,6 @@ class SpeechAnalysisModule:
             self._emotion_classifier = None
 
         # voice activity detection
-        # detects when someone is actually speaking
         try:
             self._vad = VAD.from_hparams(
                 source="speechbrain/vad-crdnn-libriparty",
@@ -95,7 +102,6 @@ class SpeechAnalysisModule:
             self._vad = None
 
         # speech recognition (ASR)
-        # transcribes speech to text for keyword detection
         try:
             self._asr = EncoderDecoderASR.from_hparams(
                 source="speechbrain/asr-conformer-transformerlm-librispeech",
@@ -111,7 +117,6 @@ class SpeechAnalysisModule:
 
     # public interface
 
-    # Called by AudioDetectionModule to feed mic audio
     def feed_audio(self, audio_chunk: np.ndarray):
         self._audio_queue.put(audio_chunk.copy())
 
@@ -166,6 +171,7 @@ class SpeechAnalysisModule:
     def _analyze_window(self, audio: np.ndarray):
         if self._stutter_module:
             self._stutter_module.feed_audio(audio)
+
         # skip silent windows
         rms = np.sqrt(np.mean(audio ** 2))
         if rms < 0.005:
@@ -210,12 +216,59 @@ class SpeechAnalysisModule:
             if transcript:
                 print(f"[SPEECH] Heard: {transcript}")
 
+        # fire distress alert outside the lock
+        if keyword and self._should_alert(keyword):
+            self._send_distress_alert(keyword)
+
+    def _should_alert(self, keyword: str) -> bool:
+        now = time.time()
+        last = self._alert_cooldown.get(keyword, 0)
+        if now - last < self._ALERT_COOLDOWN_SEC:
+            return False
+        self._alert_cooldown[keyword] = now
+        return True
+
+    def _send_distress_alert(self, keyword: str):
+        payload = {
+            "deviceId":  self._config.device_id,
+            "patientId": self._config.patient_id,
+            "room":      self._config.room,
+            "eventType": "Distress Detected",
+            "timestamp": datetime.datetime.now().isoformat(),
+            "keyword":   keyword,
+        }
+
+        print(f"[SPEECH] Sending distress alert — keyword: '{keyword}'")
+
+        def post_with_retry():
+            attempt = 0
+            while True:
+                try:
+                    response = requests.post(
+                        f"{self._config.backend_url}/alert/distress",
+                        json=payload,
+                        timeout=10,
+                        verify=False,
+                    )
+                    if response.status_code == 201:
+                        print("[SPEECH] Distress alert sent successfully.")
+                        break
+                    else:
+                        print(f"[SPEECH] Unexpected status "
+                              f"{response.status_code}, retrying...")
+                except requests.exceptions.RequestException as e:
+                    print(f"[SPEECH] Alert attempt {attempt} failed: "
+                          f"{e}, retrying in 5s...")
+                attempt += 1
+                time.sleep(5)
+
+        threading.Thread(target=post_with_retry, daemon=True).start()
+
     def _run_vad(self, waveform: torch.Tensor) -> bool:
         if self._vad is None:
             return True  # assume speech if VAD unavailable
 
         try:
-            # Save to temp file for VAD
             import tempfile
             with tempfile.NamedTemporaryFile(
                 suffix='.wav', delete=False
@@ -226,7 +279,6 @@ class SpeechAnalysisModule:
             prob = self._vad.get_speech_prob_file(tmp_path)
             os.remove(tmp_path)
 
-            # if mean speech probability > 0.5, speech detected
             return float(prob.mean()) > 0.5
 
         except Exception as e:

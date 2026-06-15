@@ -41,6 +41,29 @@ header img{
     width:260px;
 }
 
+.enrollment-container {
+    align-items: flex-start;
+}
+
+.enrollment-card {
+    width: 420px;
+    text-align: left;
+}
+
+.enrollment-card h2 {
+    text-align: center;
+}
+
+.enrollment-section h3 {
+    color: #0e6b6f;
+    font-size: 18px;
+    margin: 18px 0 8px;
+}
+
+.enrollment-card button {
+    margin-top: 14px;
+}
+
 .form-card h2{
     margin-bottom:20px;
     color:#0e6b6f;

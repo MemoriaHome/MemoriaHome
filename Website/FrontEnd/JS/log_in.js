@@ -26,9 +26,10 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('user', JSON.stringify(data.user));
 
-    // Check data.role directly
     if (data.user.role === "caregiver") {
       window.location.href = '../Pages/caregiver-dash.html';
+    } else if (data.user.role === "admin" || data.user.role === "family") {
+      window.location.href = '../Pages/admin.html';
     } else {
       window.location.href = '/dashboard.html'; // Default redirect
     }

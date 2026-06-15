@@ -1,12 +1,17 @@
 import os
+import csv
 import queue
 import threading
 import time
+import datetime
 import tempfile
 import numpy as np
 import torch
 import torchaudio
 import librosa
+
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from speechbrain.inference.classifiers import EncoderClassifier
 from shared.config import Config
@@ -166,7 +171,29 @@ class AudioDetectionModule:
 
         try:
             import sounddevice as sd
+
+            # Resolve Kinect mic device index
+            device_index = None
+            kinect_device = self._config.kinect_audio_device
+
+            if kinect_device is not None:
+                if isinstance(kinect_device, int):
+                    device_index = kinect_device
+                    print(f"[AUDIO] Using Kinect mic at index {device_index}")
+                else:
+                    devices = sd.query_devices()
+                    for i, d in enumerate(devices):
+                        if kinect_device.lower() in d['name'].lower():
+                            device_index = i
+                            print(f"[AUDIO] Kinect mic found: "
+                                  f"'{d['name']}' (index {i})")
+                            break
+                    if device_index is None:
+                        print(f"[AUDIO] Kinect mic '{kinect_device}' not found "
+                              f"— using system default")
+
             self._mic_stream = sd.InputStream(
+                device=device_index,
                 samplerate=self.SAMPLE_RATE,
                 channels=1,
                 callback=self._audio_callback,
@@ -362,7 +389,7 @@ class AudioDetectionModule:
         else:
             self._librosa_stutter_fallback(audio)
 
-    # wav2vec2 to classsify stutter type
+    # wav2vec2 to classify stutter type
     def _wav2vec2_stutter(self, audio: np.ndarray):
         try:
             inputs = self._stutter_processor(
@@ -404,11 +431,14 @@ class AudioDetectionModule:
                           f"({pred_score:.0%})"
                           + ("!!!" if concerning else ""))
 
+            if is_stutter:
+                self._log_stutter(pred_label, pred_score, concerning)
+
         except Exception as e:
             print(f"[AUDIO] wav2vec2 stutter error: {e}")
             self._librosa_stutter_fallback(audio)
 
-    # librosa fall for stutter detection
+    # librosa fallback for stutter detection
     # detects repetitions and blocks acoustically
     def _librosa_stutter_fallback(self, audio: np.ndarray):
         try:
@@ -457,5 +487,37 @@ class AudioDetectionModule:
 
                     print(f"[AUDIO] STUTTER (librosa): {stutter_type}")
 
+            if stutter_type:
+                concerning = stutter_type in self.CONCERNING_STUTTER_TYPES
+                self._log_stutter(stutter_type, 0.6, concerning)
+
         except Exception as e:
             print(f"[AUDIO] Librosa stutter fallback error: {e}")
+
+    # CSV logging for stutter events
+
+    def _log_stutter(self, stutter_type: str, score: float, is_concerning: bool):
+        try:
+            log_dir  = "logs"
+            os.makedirs(log_dir, exist_ok=True)
+            date_str = datetime.date.today().strftime('%Y-%m-%d')
+            log_file = os.path.join(log_dir, f"stutter_{date_str}.csv")
+
+            file_exists = os.path.isfile(log_file)
+            with open(log_file, "a", newline="") as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow([
+                        "timestamp", "patient_id",
+                        "stutter_type", "confidence", "is_concerning"
+                    ])
+                writer.writerow([
+                    datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    self._config.patient_id,
+                    stutter_type,
+                    f"{score:.4f}",
+                    is_concerning,
+                ])
+            print(f"[STUTTER] Logged to {log_file}")
+        except Exception as e:
+            print(f"[STUTTER] CSV log error: {e}")

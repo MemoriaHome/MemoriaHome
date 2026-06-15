@@ -246,6 +246,12 @@ body {
   overflow: hidden;
 }
 
+.management-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+
 .table-card-header {
   display: flex;
   align-items: center;

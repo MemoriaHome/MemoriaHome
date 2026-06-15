@@ -15,6 +15,8 @@ class Config:
     stream_width: int = 960
     stream_height: int = 540
     stream_fps: int = 15
+    audio_threshold: float = 0.6
+    audio_cooldown_seconds: int = 30
 
     @staticmethod
     def load(path: str = "config.json") -> "Config":
@@ -38,6 +40,8 @@ class Config:
                 stream_width=int(data.get('stream_width', 960)),
                 stream_height=int(data.get('stream_height', 540)),
                 stream_fps=int(data.get('stream_fps', 15)),
+                audio_threshold=float(data.get('audio_threshold', 0.6)),
+                audio_cooldown_seconds=int(data.get('audio_cooldown_seconds', 30)),
             )
         except KeyError as e:
             sys.exit(f"[ERROR] Missing required config key: {e} ...Exiting")

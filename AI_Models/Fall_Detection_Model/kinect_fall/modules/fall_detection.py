@@ -54,7 +54,7 @@ class FallDetectionModule(BaseModule):
         r2_access_key_id     = os.environ["R2_ACCESS_KEY_ID"]
         r2_secret_access_key = os.environ["R2_SECRET_ACCESS_KEY"]
         self._r2_public_url  = os.environ["R2_PUBLIC_URL"]
-        self._bucket         = os.environ.get("R2_BUCKET", "fall-detection")
+        self._bucket         = os.environ.get("R2_BUCKET_FALL", "fall-detection")
 
         self._s3 = boto3.client(
             "s3",
@@ -437,8 +437,8 @@ class FallDetectionModule(BaseModule):
     def _upload_clip_to_r2(self, clip_path: str):
         try:
             name = f"fallen_clip_{int(time.time())}.mp4"
-            ##with open(clip_path, "rb") as f:
-                ##self._s3.upload_fileobj(f, self._bucket, name)
+            with open(clip_path, "rb") as f:
+                self._s3.upload_fileobj(f, self._bucket, name)
             self._video_blob_name = name
             print(f"Uploaded video: {name}")
         except Exception as e:

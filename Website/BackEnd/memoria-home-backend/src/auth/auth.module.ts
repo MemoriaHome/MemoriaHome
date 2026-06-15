@@ -8,9 +8,23 @@ import { CaregiverModule } from '../caregiver/caregiver.module';
 import { AuthController } from './auth.controller';
 import { User } from '../entities/user.entity';
 import { BreakGlassAccessLog } from '../entities/break_glass_access_log.entity';
+import { Domain } from '../entities/domain.entity';
+import { Admin } from '../entities/admin.entity';
+import { Family } from '../entities/family.entity';
+import { Patient } from '../entities/patient.entity';
+import { FamilyPatient } from '../entities/family_patient.entity';
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Caregiver,User,BreakGlassAccessLog]),
+    TypeOrmModule.forFeature([
+      Admin,
+      Caregiver,
+      Domain,
+      Family,
+      FamilyPatient,
+      Patient,
+      User,
+      BreakGlassAccessLog,
+    ]),
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'superSecretKey', // Use env variable in production

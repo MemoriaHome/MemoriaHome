@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { User } from './user.entity';
 import { PatientCaregiver } from '../entities/patientToCaregiver.entity';
+import { FamilyPatient } from './family_patient.entity';
 
 @Entity('patients')
 export class Patient {
@@ -50,5 +51,8 @@ export class Patient {
 
   @OneToMany(() => PatientCaregiver, (pc) => pc.patient)
   assignments: PatientCaregiver[];
+
+  @OneToMany(() => FamilyPatient, (familyPatient) => familyPatient.patient)
+  familyLinks: FamilyPatient[];
 
 }

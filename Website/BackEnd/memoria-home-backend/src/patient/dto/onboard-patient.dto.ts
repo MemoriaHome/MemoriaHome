@@ -46,4 +46,9 @@ export class OnboardPatientDto {
   @MaxLength(50)
   dementia_stage?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  relationship?: string;
+
 }

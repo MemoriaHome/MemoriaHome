@@ -10,36 +10,73 @@
 <h1><span class="dark">Memoria</span><span class="light">Home</span></h1>
 <img src="../Assets/logo1.png">
 </header>
-<div class="container">
-<div class="form-card">
-<h2>Sign up</h2>
+<div class="container enrollment-container">
+<div class="form-card enrollment-card">
+<h2>Create your workspace</h2>
 <form id="signup-form">
 
-  <!-- Step 1: Always visible -->
-  <select id="role-select" required>
-    <option value="">Select Role</option>
-    <option value="caregiver">Caregiver</option>
-    <option value="doctor">Doctor</option>
-    <option value="family">Family Member</option>
+  <select id="domain-type" required>
+    <option value="">Select setup type</option>
+    <option value="institute">Institute</option>
+    <option value="personal">Personal / Family Home</option>
   </select>
 
-  <!-- Caregiver Fields -->
-  <div id="caregiver-fields" class="role-fields" style="display:none;">
-    <input type="text" id="first-name" placeholder="First Name" required>
-    <input type="text" id="last-name" placeholder="Last Name" required>
-    <input type="email" id="email" placeholder="Email" required>
-    <input type="password" id="password" placeholder="Password" required>
-    <input type="password" id="confirm-password" placeholder="Confirm Password" required>
-    <input type="tel" id="phone" placeholder="Phone Number" required>
-    <input type="text" id="specialization" placeholder="Specialization" required>
-    <input type="text" id="licence-number" placeholder="Licence Number" required>
-    <input type="number" id="years-experience" placeholder="Years of Experience" min="0" max="255" required>
+  <div id="institute-fields" class="enrollment-section" style="display:none;">
+    <h3>Institute</h3>
+    <input type="text" id="institute-name" placeholder="Institute Name" required>
+    <input type="email" id="institute-contact-email" placeholder="Institute Contact Email" required>
+    <input type="tel" id="institute-phone" placeholder="Institute Phone" required>
+    <input type="text" id="institute-address" placeholder="Institute Address" required>
+
+    <h3>First Admin</h3>
+    <input type="text" id="institute-admin-first-name" placeholder="First Name" required>
+    <input type="text" id="institute-admin-last-name" placeholder="Last Name" required>
+    <input type="tel" id="institute-admin-phone" placeholder="Phone Number" required>
+    <input type="text" id="institute-admin-job-title" placeholder="Job Title">
+    <input type="email" id="institute-admin-email" placeholder="Email" required>
+    <input type="password" id="institute-password" placeholder="Password" required>
+    <input type="password" id="institute-confirm-password" placeholder="Confirm Password" required>
   </div>
 
-  <!-- Doctor Fields: coming soon -->
-  <!-- Family Fields: coming soon -->
+  <div id="personal-fields" class="enrollment-section" style="display:none;">
+    <h3>Family Home</h3>
+    <input type="text" id="personal-home-name" placeholder="Home / Family Name" required>
+    <input type="email" id="personal-contact-email" placeholder="Contact Email" required>
+    <input type="tel" id="personal-phone" placeholder="Contact Phone" required>
+    <input type="text" id="personal-address" placeholder="Home Address" required>
 
-  <button type="submit" id="submit-btn" style="display:none;">Submit</button>
+    <h3>Family Account</h3>
+    <input type="text" id="family-first-name" placeholder="First Name" required>
+    <input type="text" id="family-last-name" placeholder="Last Name" required>
+    <input type="tel" id="family-phone" placeholder="Phone Number" required>
+    <input type="email" id="family-email" placeholder="Email" required>
+    <input type="password" id="personal-password" placeholder="Password" required>
+    <input type="password" id="personal-confirm-password" placeholder="Confirm Password" required>
+
+    <h3>First Patient</h3>
+    <input type="text" id="patient-first-name" placeholder="Patient First Name" required>
+    <input type="text" id="patient-last-name" placeholder="Patient Last Name" required>
+    <input type="date" id="patient-date-of-birth" required>
+    <select id="patient-gender" required>
+      <option value="">Select Gender</option>
+      <option>Male</option>
+      <option>Female</option>
+      <option>Other</option>
+    </select>
+    <input type="tel" id="patient-emergency-contact" placeholder="Emergency Contact">
+    <input type="text" id="patient-emergency-contact-name" placeholder="Emergency Contact Name">
+    <input type="text" id="patient-address" placeholder="Patient Address">
+    <select id="patient-dementia-stage">
+      <option value="">Select Dementia Stage</option>
+      <option>Stage 1</option>
+      <option>Stage 2</option>
+      <option>Stage 3</option>
+      <option>Stage 4</option>
+    </select>
+    <input type="text" id="patient-relationship" placeholder="Relationship to Patient" required>
+  </div>
+
+  <button type="submit" id="submit-btn">Create Account</button>
   <p class="link">
     <a href="../Pages/log_in.html">Sign in</a>
   </p>
@@ -59,7 +96,7 @@ Powered by Intelligent Monitoring..
 </div>
 </div>
 <footer>
-© All Rights Reserved
+All Rights Reserved
 </footer>
 <script src="../JS/sign_up.js"></script>
 </body>

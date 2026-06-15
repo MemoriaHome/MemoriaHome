@@ -1,12 +1,14 @@
 {
   "device_id": "cam-01",
-  "patient_id": "5",
+  "patient_id": "8",
   "room": "Living Room",
   "backend_url": "https://localhost:3000",
   "signaling_url": "https://localhost:3000",
-  "kinect_audio_device": null,
+  "kinect_audio_device": "NUI Sens",
   "stream_width": 960,
   "stream_height": 540,
   "stream_fps": 15,
+  "audio_threshold": 0.6,
+  "audio_cooldown_seconds": 30,
   "recording_path": "C:\\MyGit\\MemoriaHome\\AI_Models\\Fall_Detection_Model\\kinect_fall\\Recordings"
 }
