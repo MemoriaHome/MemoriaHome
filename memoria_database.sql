@@ -1,16 +1,31 @@
+CREATE TABLE domains (
+    domain_id SERIAL PRIMARY KEY,
+    domain_type VARCHAR(20) NOT NULL CHECK (domain_type IN ('personal', 'institute')),
+    name VARCHAR(255) NOT NULL,
+    contact_email VARCHAR(255),
+    phone VARCHAR(20),
+    address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_domains_type ON domains(domain_type);
+
 -- user and profile management
 
 CREATE TABLE users (
-    user_id SERIAL PRIMARY KEY,
+    user_id INTEGER UNIQUE NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     email VARCHAR(255) UNIQUE NOT NULL,
     pass VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL CHECK (role IN ('patient', 'caregiver', 'admin', 'family')),
+    domain_id INTEGER NOT NULL REFERENCES domains(domain_id) ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP
 );
 
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_domain_id ON users(domain_id);
 
 CREATE TABLE patients (
     patient_id SERIAL PRIMARY KEY,
@@ -55,6 +70,30 @@ CREATE TABLE patient_caregivers (
     notification_priority INTEGER DEFAULT 1,  -- 1 is the highest priority
     UNIQUE(patient_id, caregiver_id)
 );
+
+CREATE TABLE families (
+    family_id SERIAL PRIMARY KEY,
+    user_id INTEGER UNIQUE NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_families_user_id ON families(user_id);
+
+CREATE TABLE family_patients (
+    family_patient_id SERIAL PRIMARY KEY,
+    family_id INTEGER NOT NULL REFERENCES families(family_id) ON DELETE CASCADE,
+    patient_id INTEGER NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
+    relationship VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(family_id, patient_id)
+);
+
+CREATE INDEX idx_family_patients_family ON family_patients(family_id);
+CREATE INDEX idx_family_patients_patient ON family_patients(patient_id);
 
 CREATE TABLE shift (
 	shift_id SERIAL PRIMARY KEY,
@@ -151,3 +190,5 @@ ON break_glass_access_logs(timestamp DESC);
 
 CREATE INDEX idx_break_glass_logs_patient_timestamp
 ON break_glass_access_logs(patient_id, timestamp DESC);
+
+
