@@ -95,6 +95,19 @@ CREATE TABLE family_patients (
 CREATE INDEX idx_family_patients_family ON family_patients(family_id);
 CREATE INDEX idx_family_patients_patient ON family_patients(patient_id);
 
+CREATE TABLE admins (
+    admin_id SERIAL PRIMARY KEY,
+    user_id INTEGER UNIQUE NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    job_title VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_admins_user_id ON admins(user_id);
+
 CREATE TABLE shift (
 	shift_id SERIAL PRIMARY KEY,
     assignment_id INTEGER REFERENCES patient_caregivers(assignment_id) ON DELETE CASCADE,
