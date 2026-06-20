@@ -114,53 +114,57 @@ class TrackingActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                TrackAppUi(onExit = {buttonClicked()}, buttontext)
+                TrackAppUi(
+                    onToggle = { stopButtonClicked() },
+                    onToggleHR = {
+                        if (activeSensors.contains("HR")) {
+                            googleServicesManager.stopMeasuring(DataType.HEART_RATE_BPM)
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                publish("Monitoring stopped", "watch-data")
+                            }
+                            activeSensors = activeSensors - "HR"
+                            heartRate = "--"
+                        } else {
+                            if(isTracking && sensorManager.isWorn) {
+                                googleServicesManager.startMeasuring(DataType.HEART_RATE_BPM) { type, data -> dataHandleMeassure(type, data) }
+                                activeSensors = activeSensors + "HR"
+                            }
+                        }
+                    },
+                    onToggleAcclr = {
+                        if(activeSensors.contains("Acclr")){
+                            sensorManager.stopAcclr()
+                            activeSensors = activeSensors - "Acclr"
+                            acclrData = "--"
+                        } else {
+                            if(isTracking && sensorManager.isWorn) {
+                                sensorManager.startAcclr()
+                                activeSensors = activeSensors + "Acclr"
+                            }
+                        }
+                    },
+                    isTracking = isTracking,
+                    heartRate = heartRate,
+                    acclrData = acclrData,
+                    activeSensors = activeSensors
+                )
             }
         }
     }
 
-
-    // handles data from the HealthSDKManager (Samsung's Health Tracking SDK)
-    private fun dataHandleSDK(type: HealthTrackerType, p0: List<DataPoint?>) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            for (data in p0) {
-                data ?: continue
-
-                when (type){
-                    HealthTrackerType.HEART_RATE_CONTINUOUS -> {
-                        val hrData = data.getValue(ValueKey.HeartRateSet.HEART_RATE)
-                        launch {
-                            try {
-                                mqtt.publish("watch-data", hrData.toString(), 1)
-                            } catch (e: Exception) {
-
-                                Log.e("MQTT", "Publish failed: ${e.message}")
-
-                                Log.d("MQTT", "Publish failed: ${e.message}")
-                            }
-                        }
-                        Log.d(TAG, "Heart Rate: $hrData")
-                    }
-
-                    HealthTrackerType.ACCELEROMETER_CONTINUOUS -> {
-                        val accelDataX = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_X)
-                        val accelDataY = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_Y)
-                        val accelDataZ = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_Z)
-
-                        launch {
-                            try {
-                                var payload = "{\\\"x\\\":$accelDataX, \\\"y\\\":$accelDataY, \\\"z\\\":$accelDataZ}"
-                                mqtt.publish("watch-data", payload, 1)
-                            } catch (e: Exception) {
-                                Log.e("MQTT", "Publish failed: ${e.message}")
-                            }
-                        }
-
-                        Log.d(TAG, "Accelerometer X: $accelDataX, Y: $accelDataY, Z: $accelDataZ")
-                    }
-                    else -> { }
-                }
+    private fun stopButtonClicked(){
+        if(isTracking){
+            sensorManager.pauseAll()
+            googleServicesManager.pauseAllMeasuring()
+            lifecycleScope.launch(Dispatchers.IO) {
+                publish("Monitoring paused", "watch-data")
             }
+            isTracking = false
+        } else {
+            googleServicesManager.resumeAllMeasuring()
+            if (sensorManager.isWorn) sensorManager.resumeAll()
+            mqtt.mqttConnect(MainActivity.ipAddress, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false )
+            isTracking = true
         }
     }
 
@@ -191,58 +195,10 @@ class TrackingActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "TrackingActivity Destroyed")
-        if(::mSensorManager.isInitialized){ mSensorManager.unregisterListener(this); }
-
-        healthSDKManager.disconnect()
-
-        healthServicesManager.stopPassiveCallback()
-        healthServicesManager.stopPassiveService()
-    }
-
-    override fun onAccuracyChanged(p0: Sensor?, p1: Int) {
-        //
-    }
-
-    override fun onSensorChanged(p0: SensorEvent?) {
-        val offBodyDataFloat = p0?.values[0]
-        val offBodyData = offBodyDataFloat?.toInt()
-        if (offBodyData == 1){
-            Log.d(TAG, "Watch is being worn")
-            healthSDKManager.resumeAllTrackers()
-        } else {
-            Log.d(TAG, "Watch is NOT being worn")
-            Toast.makeText(this, "Watch removed",Toast.LENGTH_LONG).show()
-            healthSDKManager.pauseAllTrackers()
-        }
-    }
-
-    private fun startOffBodySensor(){
-        mSensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        offBodySensor = mSensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT)
-        mSensorManager.registerListener(this, offBodySensor, SensorManager.SENSOR_DELAY_NORMAL)
-    }
-
-    private fun startTracking() {
-        startOffBodySensor()
-        //healthSDKManager.startTracker(HealthTrackerType.ACCELEROMETER_CONTINUOUS)
-        healthSDKManager.startTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
-        buttontext = "Stop Tracking"
-        isTracking = true
-    }
-
-    private fun buttonClicked(){
-        if(isTracking){
-            if(::mSensorManager.isInitialized){ mSensorManager.unregisterListener(this); }
-            healthSDKManager.pauseAllTrackers()
-            buttontext = "Start Tracking"
-            isTracking = false
-        } else {
-            startOffBodySensor()
-            healthSDKManager.resumeAllTrackers()
-            mqtt.mqttConnect(BuildConfig.MQTT_BROKER, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false )
-            buttontext = "Stop Tracking"
-            isTracking = true
-        }
+        sensorManager.stopAll()
+        googleServicesManager.resetAllMeasuring()
+//        googleServicesManager.stopPassiveCallback()
+//        googleServicesManager.stopPassiveService()
     }
 }
 
