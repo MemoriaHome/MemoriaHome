@@ -67,6 +67,7 @@ class TrackingActivity : ComponentActivity() {
 
     private var heartRate by mutableStateOf("--")
     private var acclrData by mutableStateOf("--")
+    private var gyroData by mutableStateOf("--")
 
     lateinit var googleServicesManager: HealthServicesManager // google's
     private lateinit var sensorManager : SensorManagerWrapper // interacts with hardware
@@ -103,10 +104,17 @@ class TrackingActivity : ComponentActivity() {
             },
             onAcclr = { x, y, z ->
                 acclrData = "x:$x \ny:$y \nz:$z"
-//                lifecycleScope.launch(Dispatchers.IO) {
-//                    publish(acclrData, "watch-data")
-//                }
+                lifecycleScope.launch(Dispatchers.IO) {
+                    publish(buildSensorPayload("acclr", x, y, z), "watch-data")
+                }
                 Log.d(TAG, "Acclr: x=$x, y=$y,z=$z")
+            },
+            onGyro = { x, y, z ->
+                gyroData = "x:$x \ny:$y \nz:$z"
+                lifecycleScope.launch(Dispatchers.IO) {
+                    publish(buildSensorPayload("gyro", x, y, z), "watch-data")
+                }
+                Log.d(TAG, "Gyro: x=$x, y=$y, z=$z")
             })
 
         sensorManager.startOffBody()
@@ -143,9 +151,22 @@ class TrackingActivity : ComponentActivity() {
                             }
                         }
                     },
+                    onToggleGyro = {
+                        if(activeSensors.contains("Gyro")){
+                            sensorManager.stopGyro()
+                            activeSensors = activeSensors - "Gyro"
+                            gyroData = "--"
+                        } else {
+                            if(isTracking && sensorManager.isWorn) {
+                                sensorManager.startGyro()
+                                activeSensors = activeSensors + "Gyro"
+                            }
+                        }
+                    },
                     isTracking = isTracking,
                     heartRate = heartRate,
                     acclrData = acclrData,
+                    gyroData = gyroData,
                     activeSensors = activeSensors
                 )
             }
@@ -184,6 +205,10 @@ class TrackingActivity : ComponentActivity() {
         }
     }
 
+    private fun buildSensorPayload(type: String, x: Float, y: Float, z: Float): String {
+        return "{\"type\":\"$type\",\"x\":$x,\"y\":$y,\"z\":$z,\"ts\":${System.currentTimeMillis()}}"
+    }
+
     private fun publish(data: String, topic: String){
         try {
             mqtt.publish(topic, data, 1)
@@ -207,13 +232,16 @@ fun TrackAppUi(
     onToggle: () -> Unit,
     onToggleHR: () -> Unit,
     onToggleAcclr: () -> Unit,
+    onToggleGyro: () -> Unit,
     isTracking: Boolean,
     heartRate: String,
     acclrData: String,
+    gyroData: String,
     activeSensors: Set<String>
 ) {
     val hrActive = activeSensors.contains("HR")
     val acclrActive = activeSensors.contains("Acclr")
+    val gyroActive = activeSensors.contains("Gyro")
 
     Scaffold {
         androidx.wear.compose.foundation.lazy.ScalingLazyColumn(
@@ -243,7 +271,7 @@ fun TrackAppUi(
                 androidx.compose.foundation.layout.Column(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (!hrActive && !acclrActive) {
+                    if (!hrActive && !acclrActive && !gyroActive) {
                         Text(
                             text = "None",
                             style = MaterialTheme.typography.caption2,
@@ -265,7 +293,7 @@ fun TrackAppUi(
                             color = androidx.compose.ui.graphics.Color.Gray
                         )
                     }
-                    if (hrActive && acclrActive) {
+                    if (hrActive && (acclrActive || gyroActive)) {
                         androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(4.dp))
                     }
                     if (acclrActive) {
@@ -277,6 +305,23 @@ fun TrackAppUi(
                         )
                         Text(
                             text = acclrData,
+                            style = MaterialTheme.typography.caption3,
+                            textAlign = TextAlign.Center,
+                            color = androidx.compose.ui.graphics.Color.Gray
+                        )
+                    }
+                    if (acclrActive && gyroActive) {
+                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(4.dp))
+                    }
+                    if (gyroActive) {
+                        Text(
+                            text = "Gyroscope",
+                            style = MaterialTheme.typography.caption2,
+                            textAlign = TextAlign.Center,
+                            color = androidx.compose.ui.graphics.Color.LightGray
+                        )
+                        Text(
+                            text = gyroData,
                             style = MaterialTheme.typography.caption3,
                             textAlign = TextAlign.Center,
                             color = androidx.compose.ui.graphics.Color.Gray
@@ -351,6 +396,28 @@ fun TrackAppUi(
                     )
                 }
             }
+            item {
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(4.dp))
+                Button(
+                    onClick = onToggleGyro,
+                    modifier = Modifier
+                        .fillMaxWidth(0.5f)
+                        .height(20.dp),
+                    colors = androidx.wear.compose.material.ButtonDefaults.buttonColors(
+                        backgroundColor = androidx.compose.ui.graphics.Color(0xFF424242)
+                    )
+                ) {
+                    Text(
+                        text = "Gyroscope",
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.caption2,
+                        color = if (gyroActive)
+                            androidx.compose.ui.graphics.Color.White
+                        else
+                            androidx.compose.ui.graphics.Color.Gray
+                    )
+                }
+            }
         }
     }
 }
@@ -368,10 +435,12 @@ fun TrackingActivityPreview() {
             onToggle = {},
             onToggleHR = {},
             onToggleAcclr = {},
+            onToggleGyro = {},
             isTracking = true,
             heartRate = "72",
             acclrData = "x:0.1 y:9.8 z:0.3",
-            activeSensors = setOf("HR", "Acclr")
+            gyroData = "x:0.01 y:0.02 z:-0.01",
+            activeSensors = setOf("HR", "Acclr", "Gyro")
         )
     }
 }
