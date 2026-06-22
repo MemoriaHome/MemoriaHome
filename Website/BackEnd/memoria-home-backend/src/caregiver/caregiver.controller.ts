@@ -1,7 +1,21 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { CaregiverService } from './caregiver.service';
 import { CreateCaregiverDto } from './dto/create-caregiver.dto';
 import { UpdateCaregiverDto } from './dto/update-caregiver.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
 
 @Controller('caregiver')
 export class CaregiverController {
@@ -27,8 +41,22 @@ export class CaregiverController {
 
   // Returns the caregiver's profile + all their assigned patients
   @Get(':id/patients')
-  getMyPatients(@Param('id') id: string) {
-    return this.caregiverService.getMyPatients(+id);
+  @UseGuards(JwtAuthGuard)
+  getMyPatients(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    if (
+      req.user.role !== 'caregiver' ||
+      !req.user.caregiver_id ||
+      req.user.caregiver_id !== id
+    ) {
+      throw new ForbiddenException(
+        'Caregivers can only access their own assigned patients',
+      );
+    }
+
+    return this.caregiverService.getMyPatients(req.user.caregiver_id);
   }
 
   @Patch(':id')
