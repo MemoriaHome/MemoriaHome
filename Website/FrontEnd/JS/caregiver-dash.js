@@ -2,15 +2,45 @@
 const API_BASE = 'https://localhost:3000';
 
 const token = localStorage.getItem("access_token");
+const storedUser = parseStoredUser();
 
-let CAREGIVER_ID = null
+let CAREGIVER_ID = getCurrentCaregiverId();
 
-if(token){
-  const payload = token.split('.')[1]
-  const decodedPayload =  JSON.parse(atob(payload))
-  CAREGIVER_ID = decodedPayload.rid
-}else{
+if (!token || CAREGIVER_ID == null) {
   window.location.href = '../Pages/log_in.html';
+}
+
+function getCurrentCaregiverId() {
+  const decodedPayload = decodeJwtPayload(token);
+  const rawId =
+    decodedPayload?.caregiver_id ??
+    decodedPayload?.rid ??
+    storedUser?.caregiver_id ??
+    storedUser?.rid;
+
+  const caregiverId = Number(rawId);
+  return Number.isFinite(caregiverId) ? caregiverId : null;
+}
+
+function parseStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function decodeJwtPayload(jwt) {
+  try {
+    const payload = jwt?.split('.')[1];
+    if (!payload) return null;
+
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
 }
 
 // Loaded from API
@@ -53,7 +83,13 @@ function openTab(tabName) {
 // ── LOAD CAREGIVER + PATIENTS FROM API ────────────────────────────────────────
 async function loadDashboard() {
   try {
-    const response = await fetch(`${API_BASE}/caregiver/${CAREGIVER_ID}/patients`);
+    if (CAREGIVER_ID == null) throw new Error('Missing caregiver session');
+
+    const response = await fetch(`${API_BASE}/caregiver/${CAREGIVER_ID}/patients`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
     if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
@@ -79,6 +115,8 @@ async function loadDashboard() {
 // ── LOAD ALERTS FROM API (page load seed) ─────────────────────────────────────
 async function loadAlerts() {
   try {
+    if (CAREGIVER_ID == null) return;
+
     const res  = await fetch(`${API_BASE}/alert/caregiver/${CAREGIVER_ID}`);
     if (!res.ok) return;
     const data = await res.json();
@@ -931,6 +969,8 @@ function escapeJsStringAttribute(value) {
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  if (CAREGIVER_ID == null) return;
+
   const dateEl = document.getElementById('today-date');
   if (dateEl) {
     dateEl.textContent = new Date().toLocaleDateString('en-US', {

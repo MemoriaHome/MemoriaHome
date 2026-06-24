@@ -75,10 +75,10 @@ def main():
     display_module = DisplayModule(display_queue, config, command_queue)
 
     # Audio pipeline
-    audio_module  = AudioDetectionModule(config)
-    speech_module = SpeechAnalysisModule(config)
-    audio_module.set_speech_module(speech_module)
-    fall_module.set_audio_module(audio_module)
+    ##audio_module  = AudioDetectionModule(config)
+    ##speech_module = SpeechAnalysisModule(config)
+    ##audio_module.set_speech_module(speech_module)
+    ##fall_module.set_audio_module(audio_module)
 
     face_module.start()
     fall_module.start()
@@ -86,8 +86,8 @@ def main():
     display_module.start()
     compositor_module.start()
     webrtc_service.start()
-    speech_module.start()
-    audio_module.start()
+    ##speech_module.start()
+    ##audio_module.start()
 
     capture = KinectCapture(bus)
     try:
