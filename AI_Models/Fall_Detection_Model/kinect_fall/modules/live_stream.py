@@ -17,8 +17,9 @@ class LiveStreamModule(BaseModule):
         face_results_queue: queue.Queue,
         fall_overlay_queue: queue.Queue,
         stream_hub: AnnotatedStreamHub,
+        max_fps: int | float | None = None,
     ):
-        super().__init__(frame_queue)
+        super().__init__(frame_queue, max_fps=max_fps)
         self._face_results_queue = face_results_queue
         self._fall_overlay_queue = fall_overlay_queue
         self._stream_hub = stream_hub
@@ -167,7 +168,11 @@ class LiveStreamModule(BaseModule):
         image: np.ndarray,
         source_size: tuple[int, int],
     ) -> None:
-        for bbox, name, sim, _is_match, _angle in self._latest_faces:
+        for face_result in self._latest_faces:
+            if len(face_result) == 6:
+                bbox, name, _patient_id, sim, _is_match, _angle = face_result
+            else:
+                bbox, name, sim, _is_match, _angle = face_result
             x1, y1, x2, y2 = self._scale_bbox(bbox, source_size)
             color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
             cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)

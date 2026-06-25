@@ -5,8 +5,15 @@ from modules.base_module import BaseModule
 
 
 class DisplayModule(BaseModule):
-    def __init__(self, frame_queue: queue.Queue, config, command_queue: queue.Queue, window_name: str = "MemoriaHome Monitor"):
-        super().__init__(frame_queue)
+    def __init__(
+        self,
+        frame_queue: queue.Queue,
+        config,
+        command_queue: queue.Queue,
+        window_name: str = "MemoriaHome Monitor",
+        max_fps: int | float | None = None,
+    ):
+        super().__init__(frame_queue, max_fps=max_fps)
         self._window_name = window_name
         self._command_queue = command_queue
         

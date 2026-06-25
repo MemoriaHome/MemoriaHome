@@ -29,7 +29,9 @@ def load_encodings():
     print(f"[INFO] Loading encodings from database...")
 
     embeddingsListKnown = []
-    known_ids = []
+    known_names = []
+
+    id_to_name = {}
 
     response = s3.list_objects_v2(Bucket=BUCKET, Prefix=PREFIX, Delimiter='/')
     folders = response.get('CommonPrefixes', [])
@@ -46,9 +48,20 @@ def load_encodings():
         try:
             obj = s3.get_object(Bucket=BUCKET, Key=emb_path)
             embeddings = pickle.loads(obj["Body"].read())
+            objects = s3.list_objects_v2(Bucket=BUCKET, Prefix=person_prefix)
+            actual_name = person_id
+            if 'Contents' in objects:
+                for item in objects['Contents']:
+                    key = item['Key']
+                    if not key.endswith('embedding.pkl') and key != person_prefix:
+                        actual_name = key.split('/')[-1]
+                        break
+
+            id_to_name[person_id] = actual_name
+
             for emb in embeddings:
                 embeddingsListKnown.append(emb)
-                known_ids.append(person_id)
+                known_names.append(actual_name)
             print(f"[INFO] Loaded {len(embeddings)} embedding(s) for ID {person_id}")
         except Exception as e:
             print(f"[WARNING] Could not load {emb_path}: {e}")
@@ -58,9 +71,9 @@ def load_encodings():
     norms = np.linalg.norm(known_embeddings, axis=1, keepdims=True)
     known_embeddings = known_embeddings / np.clip(norms, 1e-10, None)
 
-    print(f"[INFO] Loaded {len(known_ids)} embedding(s) "
-          f"for {len(set(known_ids))} identity/identities.")
-    return known_embeddings, known_ids
+    print(f"[INFO] Loaded {len(known_names)} embedding(s) "
+          f"for {len(set(known_names))} identity/identities.")
+    return known_embeddings, known_names
 
 
 def compute_iou(a, b):
@@ -118,7 +131,7 @@ class FaceTracker:
         return results
 
 
-def find_match(unknown_embedding: np.ndarray, known_embeddings: np.ndarray, known_ids: list, threshold=0.4):
+def find_match(unknown_embedding: np.ndarray, known_embeddings: np.ndarray, known_names: list, threshold=0.4):
     norm = np.linalg.norm(unknown_embedding)
     if norm < 1e-10:
         return "Unknown", 0.0, False
@@ -129,11 +142,11 @@ def find_match(unknown_embedding: np.ndarray, known_embeddings: np.ndarray, know
     best_sim = float(sims[best_idx])
 
     if best_sim >= threshold:
-        return known_ids[best_idx], best_sim, True
+        return known_names[best_idx], best_sim, True
     return "Unknown", best_sim, False
 
 
-def at_diff_angles(imgS, app, app_small, known_embeddings, known_ids, tracker: FaceTracker):
+def at_diff_angles(imgS, app, app_small, known_embeddings, known_names, tracker: FaceTracker):
 
     faces = app.get(imgS)
     live_bboxes_small = [f.bbox.astype(int) for f in faces]
@@ -145,7 +158,7 @@ def at_diff_angles(imgS, app, app_small, known_embeddings, known_ids, tracker: F
         if not tracker.needs_recognition(bbox_full):
             continue
 
-        name, sim, is_match = find_match(face.embedding, known_embeddings, known_ids)
+        name, sim, is_match = find_match(face.embedding, known_embeddings, known_names)
 
         if not is_match:
             x1, y1, x2, y2 = bbox_small
@@ -167,7 +180,7 @@ def at_diff_angles(imgS, app, app_small, known_embeddings, known_ids, tracker: F
                     if not rot_faces:
                         continue
                     rot_faces = sorted(rot_faces, key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
-                    rot_name, rot_sim, rot_is_match = find_match(rot_faces[0].embedding, known_embeddings, known_ids)
+                    rot_name, rot_sim, rot_is_match = find_match(rot_faces[0].embedding, known_embeddings, known_names)
                     if rot_is_match:
                         name, sim, is_match = rot_name, rot_sim, rot_is_match
                         angle_used = angle
@@ -183,7 +196,7 @@ def at_diff_angles(imgS, app, app_small, known_embeddings, known_ids, tracker: F
 
 
 def main():
-    known_embeddings, known_ids = load_encodings()
+    known_embeddings, known_names = load_encodings()
 
     app = insightface.app.FaceAnalysis('buffalo_l', providers=['CUDAExecutionProvider'])
     app.prepare(ctx_id=0, det_size=(640, 640))
@@ -205,7 +218,7 @@ def main():
         imgS = cv2.resize(img, (960, 540))
         display = imgS.copy()
 
-        results = at_diff_angles(imgS, app, app_small, known_embeddings, known_ids, tracker)
+        results = at_diff_angles(imgS, app, app_small, known_embeddings, known_names, tracker)
 
         for (bbox, name, sim, is_match, angle) in results:
             print(f"[MATCH] name={name}  sim={sim:.4f}  matched={is_match}  angle={angle}")

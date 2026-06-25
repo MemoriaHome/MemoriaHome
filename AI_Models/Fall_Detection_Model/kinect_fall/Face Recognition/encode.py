@@ -31,11 +31,14 @@ response = s3.list_objects_v2(Bucket=BUCKET, Prefix=PREFIX, Delimiter='/')
 folders = response.get('CommonPrefixes', [])
 
 embeddingsListKnown = []
+patientNames = []
 patientIds = []
+
+id_to_name = {}
 
 if not folders:
     print("No patients found in the database")
-    embeddingsListKnown, patientIds = [], []
+    embeddingsListKnown, patientNames = [], []
     
 for person in folders:
     person_prefix = person['Prefix']
@@ -45,14 +48,27 @@ for person in folders:
     try:
         obj = s3.get_object(Bucket=BUCKET, Key=emb_path)
         embeddings = pickle.loads(obj["Body"].read())
+
+        # Resolve folder contents to find the name file dynamically
+        objects = s3.list_objects_v2(Bucket=BUCKET, Prefix=person_prefix)
+        actual_name = person_id
+        if 'Contents' in objects:
+            for item in objects['Contents']:
+                key = item['Key']
+                if not key.endswith('embedding.pkl') and key != person_prefix:
+                    actual_name = key.split('/')[-1]
+                    break
+
+        id_to_name[person_id] = actual_name
         for emb in embeddings:
             embeddingsListKnown.append(emb)
+            patientNames.append(actual_name)
             patientIds.append(person_id)
-        print(f"[INFO] Loaded {len(embeddings)} embedding(s) for ID {person_id}")
+        print(f"[INFO] Loaded {len(embeddings)} embedding(s) for ID {person_id} ({actual_name})")
     except Exception as e:
         print(f"[WARNING] Could not load {emb_path}: {e}")
 
-print(f"[INFO] Loaded {len(patientIds)} embedding(s) for {len(set(patientIds))} person(s).")
+print(f"[INFO] Loaded {len(patientNames)} embedding(s) for {len(set(patientNames))} person(s).")
 
 
 def get_face_embedding(frame):
@@ -65,15 +81,16 @@ def get_face_embedding(frame):
         return faces[0].embedding
     
 
-def enroll_patient(patientId):
+def enroll_patient(patientName, patient_id):
     cap = KinectCapture()
     frame_idx = 0
     captured = 0
     tempEmbList = []
-    tempIdList = []
+    tempNameList = []
+    patientId = patient_id
     start_time = time.time()
 
-    print(f"Enrolling: {patientId} | 'q' = save & quit | 'c' = cancel")
+    print(f"Enrolling: {patientName} | 'q' = save & quit | 'c' = cancel")
 
     while True:
         frame = cap.read()
@@ -88,9 +105,9 @@ def enroll_patient(patientId):
             embedding = get_face_embedding(frame)
             if embedding is not None:
                 tempEmbList.append(embedding)
-                tempIdList.append(patientId)
+                tempNameList.append(patientName)
                 captured += 1
-                print(f"Captured embedding #{captured} for {patientId}")
+                print(f"Captured embedding #{captured} for {patientName}")
             else:
                 print("No face detected, skipping frame")
 
@@ -102,12 +119,15 @@ def enroll_patient(patientId):
             if elapsed > MAX_DURATION:
                 print("Enrollment complete")
             embeddingsListKnown.extend(tempEmbList)
-            patientIds.extend(tempIdList)
-            
+            patientNames.extend(tempNameList)
+            id_to_name[str(patientId)] = patientName
             data = pickle.dumps(tempEmbList)
             person_key = f"patients/{patientId}/embedding.pkl"
+            person_name = f'patients/{patientId}/{patientName}'
             s3.put_object(Bucket=BUCKET, Key=person_key, Body=data)
-            print(f"Saved {captured} embedding(s) for '{patientId}' to R2")
+            s3.put_object(Bucket=BUCKET, Key=person_name, Body=patientName)
+
+            print(f"Saved {captured} embedding(s) for '{patientName}' to R2")
             break
 
         if key == ord('c'):
@@ -118,39 +138,55 @@ def enroll_patient(patientId):
     cv2.destroyAllWindows()
 
 
-def update_patient(patientId):
-    if patientId not in patientIds:
-        print(f"Patient '{patientId}' not found.")
+def update_patient(patientName, patientId = None):
+    if patientName not in patientNames:
+        print(f"Patient '{patientName}' not found.")
         return
-    # remove_patient(patientId, silent=True)
-    print(f"Re-enrolling '{patientId}'...")
-    enroll_patient(patientId)
+    print(f"Re-enrolling '{patientName}'...")
+    if patientId is None:
+        target_id = None
+        for k, v in id_to_name.items():
+            if v == patientName:
+                target_id = k
+                break
+        enroll_patient(patientName, target_id)
+    else:
+        remove_patient(patientName, silent=True)
+        enroll_patient(patientName, patientId)
 
 
-def remove_patient(patientId, silent=False):
-    indices = [i for i, pid in enumerate(patientIds) if pid == patientId]
+def remove_patient(patientName, silent=False):
+    indices = [i for i, pid in enumerate(patientNames) if pid == patientName]
     if not indices:
-        print(f"Patient '{patientId}' not found.")
+        print(f"Patient '{patientName}' not found.")
         return
+        
+    target_id = None
+    for k, v in id_to_name.items():
+        if v == patientName:
+            target_id = k
+            break
+
     for i in sorted(indices, reverse=True):
         embeddingsListKnown.pop(i)
-        patientIds.pop(i)
+        patientNames.pop(i)
 
-    s3.delete_object(Bucket=BUCKET, Key=f"patients/{patientId}/embedding.pkl")
+    if target_id is not None:
+        s3.delete_object(Bucket=BUCKET, Key=f"patients/{target_id}/embedding.pkl")
+        s3.delete_object(Bucket=BUCKET, Key=f"patients/{target_id}/{patientName}")
     
     if not silent:
-        print(f"Removed {len(indices)} embedding(s) for '{patientId}'.")
-
+        print(f"Removed {len(indices)} embedding(s) for '{patientName}'.")
 
 
 def inspect_patients():
-    if not patientIds:
+    if not patientNames:
         print("No patients enrolled.")
         return
-    ids = sorted(set(patientIds))
+    ids = sorted(set(patientNames))
     print(f"\n{len(ids)} enrolled patient(s):")
     for pid in ids:
-        count = patientIds.count(pid)
+        count = patientNames.count(pid)
         print(f"{pid} : {count} embedding(s)")
 
 
@@ -163,37 +199,45 @@ app.prepare(ctx_id=0, det_size=(640, 640))
 
 # start_time = time.time()
 # tempEmbList = []
-# tempIdList = []
+# tempNameList = []
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-m", "--mode", required=True, choices=['e', 'u', 'r', 's', 'q'])
 parser.add_argument('-i', '--id', required=False)
+parser.add_argument('-n', '--name', required=True)
 args = parser.parse_args()
 
+patientName = args.name
 patientId = args.id
 
 if args.mode == 'e':
-    patientId = args.id
-    if not patientId:
+    if not patientName or not patientId:
         print("ID cannot be empty.")
-        input("Enter patient ID: ").strip()
-    elif patientId in patientIds:
-        print(f"Patient '{patientId}' already exists. Use 'u' to update.")
-    else:
-        enroll_patient(patientId)
+        patientName = input("Enter patient Name: ").strip()
+        patientId = input("Enter patient Id: ").strip()
+    if patientName in patientNames or patientId in patientIds:
+        print(f"Patient '{patientName}' already exists. Use 'u' to update.")
+    elif patientName:
+        enroll_patient(patientName, patientId)
 
 elif args.mode == 'u':
-    if not patientId:
-        patientId = input("Enter patient ID to update: ").strip()
-    update_patient(patientId)
+    if not patientName:
+        patientName = input("Enter patient Name to update: ").strip()
+    new_id = input("Do you want to update the patient's ID? (y, n) ") 
+    if new_id == "y" or new_id == "Y":
+        patientId = input("Enter new ID: ")
+        update_patient(patientName, patientId)
+    else :   
+        update_patient(patientName)
 
 elif args.mode == 'r':
-    if not patientId:
-        patientId = input("Enter patient ID to remove: ").strip()
-    remove_patient(patientId)
+    if not patientName:
+        patientName = input("Enter patient Name to remove: ").strip()
+
+    remove_patient(patientName)
 
 elif args.mode == 's':
     inspect_patients()
         
 else:
-    print("Invalid choise")
+    print("Invalid choice")

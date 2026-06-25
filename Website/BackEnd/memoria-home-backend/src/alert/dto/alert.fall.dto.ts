@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, IsDateString, IsOptional } from 'class-validator';
 
 export class CreateFallAlertDto {
   @IsString()
@@ -9,9 +9,17 @@ export class CreateFallAlertDto {
   @IsNotEmpty()
   patientId: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  recognizedPatientId: string;
+  recognizedPatientId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  recognizedPatientName?: string | null;
+
+  @IsOptional()
+  @IsString()
+  subjectLabel?: string | null;
 
   @IsString()
   @IsNotEmpty()

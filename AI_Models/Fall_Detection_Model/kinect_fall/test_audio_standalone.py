@@ -12,11 +12,24 @@ import numpy as np
 
 
 class MockConfig:
+    device_id              = "audio-test"
+    patient_id             = "test-patient"
+    room                   = "Test Room"
+    backend_url            = "https://localhost:3000"
+    kinect_audio_device    = "NUI Sens"
     audio_threshold        = 0.35
     audio_cooldown_seconds = 3
+    audio_block_seconds    = 0.25
+    distress_window_seconds = 2.0
+    distress_hop_seconds   = 0.5
+    stutter_window_seconds = 3.0
+    stutter_hop_seconds    = 1.5
+    audio_debug            = True
+    stutter_log_only       = True
 
 
 from modules.audio_detection import AudioDetectionModule
+from modules.speech_analysis import SpeechAnalysisModule
 
 
 def main():
@@ -26,17 +39,20 @@ def main():
 
     config = MockConfig()
     audio  = AudioDetectionModule(config)
+    speech = SpeechAnalysisModule(config)
+    audio.set_speech_module(speech)
 
     # List available microphones
     audio.list_microphones()
 
-    # Start audio module
+    # Start audio modules
+    speech.start()
     audio.start()
 
     print("\nCommands:")
     print("  1 — Test scream.wav")
     print("  2 — Test groan.wav")
-    print("  3 — Test thud.wav")
+    print("  3 — Test stutter.wav")
     print("  4 — Test live mic (speak/make noise)")
     print("  q — Quit")
     print("\nWatching for distress sounds and stuttering...\n")
@@ -60,6 +76,15 @@ def main():
                       f"{state['stutter_type']} "
                       f"({state['stutter_score']:.0%})"
                       f"{concern}\n")
+
+            speech_state = speech.get_state()
+            if speech_state['keyword_detected']:
+                print(f"\n>>> DISTRESS WORD: "
+                      f"{speech_state['keyword']} "
+                      f"(heard: {speech_state['transcript']})\n")
+            elif speech_state['transcript']:
+                print(f"\n>>> SPEECH HEARD: "
+                      f"{speech_state['transcript']}\n")
 
             time.sleep(0.5)
 
@@ -91,10 +116,10 @@ def main():
                 ).start()
 
             elif cmd == '3':
-                print("\n--- Testing thud.wav ---")
+                print("\n--- Testing stutter.wav ---")
                 threading.Thread(
                     target=audio.test_with_file,
-                    args=("test_sounds/thud.wav",),
+                    args=("test_sounds/stutter.wav", False),
                     daemon=True
                 ).start()
 
@@ -130,6 +155,11 @@ def main():
                 print(f"  Stutter type      : {state['stutter_type']}")
                 print(f"  Stutter score     : {state['stutter_score']:.0%}")
                 print(f"  Concerning        : {state['stutter_concern']}")
+                speech_state = speech.get_state()
+                print(f"  Speech active     : {speech_state['speech_active']}")
+                print(f"  Keyword detected  : {speech_state['keyword_detected']}")
+                print(f"  Keyword           : {speech_state['keyword']}")
+                print(f"  Transcript        : {speech_state['transcript']}")
                 print()
 
             elif cmd == 'q':
@@ -139,7 +169,7 @@ def main():
                 print("\nCommands:")
                 print("  1 — Test scream.wav")
                 print("  2 — Test groan.wav")
-                print("  3 — Test thud.wav")
+                print("  3 — Test stutter.wav")
                 print("  4 — Live mic mode")
                 print("  h — Show stutter history")
                 print("  s — Show full current state")
@@ -150,6 +180,7 @@ def main():
             break
 
     audio.stop()
+    speech.stop()
     print("\nTest complete.")
 
 

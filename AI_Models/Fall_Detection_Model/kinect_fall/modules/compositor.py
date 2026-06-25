@@ -22,8 +22,9 @@ class CompositorModule(BaseModule):
         fall_annotated_queue: queue.Queue,
         face_results_queue: queue.Queue,
         display_queue: queue.Queue,
+        max_fps: int | float | None = None,
     ):
-        super().__init__(fall_annotated_queue)
+        super().__init__(fall_annotated_queue, max_fps=max_fps)
         self._face_results_queue = face_results_queue
         self._display_queue = display_queue
         # Cache the last known face results so the display stays annotated
@@ -48,7 +49,11 @@ class CompositorModule(BaseModule):
         # Work on a copy so we never mutate the object other threads may hold.
         display = frame.copy()
 
-        for (bbox, name, sim, is_match, angle) in self._latest_face_results:
+        for face_result in self._latest_face_results:
+            if len(face_result) == 6:
+                bbox, name, _patient_id, sim, _is_match, _angle = face_result
+            else:
+                bbox, name, sim, _is_match, _angle = face_result
             x1, y1, x2, y2 = bbox[:4]
             color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
             cv2.rectangle(display, (x1, y1), (x2, y2), color, 2)

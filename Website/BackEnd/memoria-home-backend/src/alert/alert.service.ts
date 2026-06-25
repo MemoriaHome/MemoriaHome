@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateFallAlertDto } from './dto/alert.fall.dto';
+import { CreateDistressAlertDto } from './dto/alert.distress.dto';
 import { AppGateway } from '../signaling/signaling.gateway';
 import { CaregiverService } from '../caregiver/caregiver.service';
 import { Patient } from '../entities/patient.entity';
@@ -29,7 +30,11 @@ export class AlertService {
 
   // ── Handle incoming fall alert ─────────────────────────────────────────────
   async handleFallAlert(dto: CreateFallAlertDto): Promise<void> {
-    console.log(`[FALL ALERT] Patient ${dto.patientId} | Room: ${dto.room} | Event: ${dto.eventType}`);
+    const recognizedId = dto.recognizedPatientId || null;
+    console.log(
+      `[FALL ALERT] Routed patient ${dto.patientId} | ` +
+      `Recognized: ${recognizedId ?? 'unknown'} | Room: ${dto.room} | Event: ${dto.eventType}`,
+    );
 
     // 1. Persist alert row
     const alert = this.alertRepo.create({
@@ -47,9 +52,12 @@ export class AlertService {
     });
     await this.patientAlertRepo.save(patientAlert);
 
-    // 3. Resolve patient name
-    const patient = await this.patientRepo.findOneBy({ patient_id: Number(dto.recognizedPatientId) });
-    const patientName = patient ? `${patient.first_name} ${patient.last_name}` : 'Unknown';
+    // 3. Resolve the identity of the body that actually fell.
+    let patientName = dto.subjectLabel || dto.recognizedPatientName || 'Unknown person';
+    if (recognizedId) {
+      const patient = await this.patientRepo.findOneBy({ patient_id: Number(recognizedId) });
+      patientName = patient ? `${patient.first_name} ${patient.last_name}` : patientName;
+    }
 
     // 4. Emit to assigned caregivers
     const caregiverIds = await this.caregiverService.getCaregiverIdsByPatient(Number(dto.patientId));
@@ -68,6 +76,10 @@ export class AlertService {
         timestamp:   alert.timestamp,
         videoUrl:    dto.videoUrl ?? null,
         severity:    'critical',
+        recognizedPatientId: recognizedId,
+        description: recognizedId
+          ? `${patientName} fell`
+          : 'Unknown person fell',
       });
     }
 
@@ -79,6 +91,75 @@ export class AlertService {
       ESCALATION_MS,
     );
     this.escalationTimers.set(alert.alert_id, timer);
+  }
+
+  async handleDistressAlert(dto: CreateDistressAlertDto): Promise<Alert> {
+    const level = dto.level || 'critical';
+    const eventType = dto.eventType || 'Distress Detected';
+
+    const alert = this.alertRepo.create({
+      event: eventType,
+      room: dto.room,
+      video_url: undefined,
+      from_device: dto.deviceId ?? undefined,
+    });
+    await this.alertRepo.save(alert);
+
+    const patientId = Number(dto.patientId);
+    const patientAlert = this.patientAlertRepo.create({
+      patient_id: patientId,
+      alert_id: alert.alert_id,
+    });
+    await this.patientAlertRepo.save(patientAlert);
+
+    const patient = await this.patientRepo.findOneBy({ patient_id: patientId });
+    const patientName = patient
+      ? `${patient.first_name} ${patient.last_name}`
+      : 'Unknown';
+
+    const caregiverIds =
+      await this.caregiverService.getCaregiverIdsByPatient(patientId);
+    if (!caregiverIds.length) {
+      console.warn(`[DISTRESS ALERT] No caregiver assigned to patient ${dto.patientId}`);
+      return alert;
+    }
+
+    const description = dto.keyword
+      ? `Keyword: ${dto.keyword}`
+      : dto.label
+        ? `Audio label: ${dto.label}`
+        : dto.detector
+          ? `Detector: ${dto.detector}`
+          : 'Audio distress detected';
+
+    for (const caregiverId of caregiverIds) {
+      this.gateway.server.to(`caregiver-${caregiverId}`).emit('fall-alert', {
+        alertId: alert.alert_id,
+        patientId: dto.patientId,
+        patientName,
+        room: dto.room,
+        eventType,
+        timestamp: alert.timestamp,
+        videoUrl: null,
+        severity: level === 'warning' ? 'warning' : 'critical',
+        source: dto.source ?? 'audio_detection',
+        detector: dto.detector ?? null,
+        keyword: dto.keyword ?? null,
+        label: dto.label ?? null,
+        confidence: dto.confidence ?? null,
+        description,
+      });
+    }
+
+    console.log(`[DISTRESS ALERT] Saved id=${alert.alert_id} patient=${dto.patientId}`);
+
+    const timer = setTimeout(
+      () => this.escalate(alert.alert_id, patientName, dto.room),
+      ESCALATION_MS,
+    );
+    this.escalationTimers.set(alert.alert_id, timer);
+
+    return alert;
   }
 
   // ── Escalation (fires when not acknowledged in time) ──────────────────────
