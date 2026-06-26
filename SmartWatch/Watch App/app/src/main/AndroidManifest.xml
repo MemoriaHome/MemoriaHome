@@ -43,15 +43,15 @@
         <!-- Foreground Service -->
         <service
             android:name=".presentation.ForegroundService"
-            android:foregroundServiceType="health"
             android:exported="false"
+            android:foregroundServiceType="health"
             android:stopWithTask="false" />
 
         <!-- Passive Data Service for Google Health Services -->
         <service
             android:name=".presentation.PassiveDataService"
-            android:permission="com.google.android.wearable.healthservices.permission.PASSIVE_DATA_BINDING"
-            android:exported="true" />
+            android:exported="true"
+            android:permission="com.google.android.wearable.healthservices.permission.PASSIVE_DATA_BINDING" />
 
         <!-- Startup Receiver for boot completion -->
         <receiver
@@ -72,17 +72,16 @@
             android:theme="@style/MainActivityTheme.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
         <activity
             android:name=".presentation.PermissionActivity"
             android:exported="false"
             android:label="@string/title_activity_permission"
             android:taskAffinity="com.example.MemoriaHomeWatch.wear"
             android:theme="@android:style/Theme.DeviceDefault" />
-
         <activity
             android:name=".presentation.TrackingActivity"
             android:exported="false"
@@ -103,6 +102,11 @@
             android:name="com.google.android.wearable.standalone"
             android:value="true" />
 
+        <activity
+            android:name=".presentation.MyApplication"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 
 </manifest>

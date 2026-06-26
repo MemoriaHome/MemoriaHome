@@ -3,8 +3,8 @@ package com.example.MemoriaHomeWatch.presentation
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.SensorEventListener
 import android.util.Log
 
 class SensorManagerWrapper(
@@ -13,50 +13,71 @@ class SensorManagerWrapper(
     private val onAcclr: (Float, Float, Float) -> Unit,
     private val onGyro: (Float, Float, Float) -> Unit
 ) : SensorEventListener {
+
     private val TAG = "SensorManagerWrapper"
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+
     private var offBodySensor: Sensor? = null
     private var accelerometer: Sensor? = null
     private var gyroscope: Sensor? = null
+
     private var acclrActive = false
     private var gyroActive = false
-    var isWorn = false
+
+    // FIX: default to true. If a device has no off-body sensor, onSensorChanged()
+    // for TYPE_LOW_LATENCY_OFFBODY_DETECT never fires, so isWorn would otherwise stay
+    // false forever — permanently blocking every sensor toggle in TrackingActivity,
+    // which requires isWorn==true before letting HR/Accl/Gyro start.
+    var isWorn = true
 
     fun startOffBody() {
         offBodySensor = sensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT)
-        sensorManager.registerListener(this, offBodySensor, SensorManager.SENSOR_DELAY_NORMAL)
-        Log.d(TAG, "Off-body sensor started")
+        // FIX: null-check before registering — passing a null Sensor into
+        // registerListener() can crash on devices without this hardware.
+        offBodySensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+            Log.d(TAG, "Off-body sensor started")
+        } ?: run {
+            isWorn = true
+            Log.w(TAG, "Off-body sensor not available on this device — defaulting isWorn=true")
+        }
     }
 
     fun startAcclr() {
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL)
-        acclrActive = true
-        Log.d(TAG, "Accelerometer started")
+        accelerometer?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+            acclrActive = true
+            Log.d(TAG, "Accelerometer started")
+        } ?: Log.w(TAG, "Accelerometer not available on this device")
     }
 
     fun stopAcclr() {
-        sensorManager.unregisterListener(this, accelerometer)
+        // FIX: null-check — unregisterListener(this, null) is unsafe if startAcclr()
+        // was never successfully called (e.g. sensor missing).
+        accelerometer?.let { sensorManager.unregisterListener(this, it) }
         acclrActive = false
         Log.d(TAG, "Accelerometer stopped")
     }
 
     fun startGyro() {
         gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
-        sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_NORMAL)
-        gyroActive = true
-        Log.d(TAG, "Gyroscope started")
+        gyroscope?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+            gyroActive = true
+            Log.d(TAG, "Gyroscope started")
+        } ?: Log.w(TAG, "Gyroscope not available on this device")
     }
 
     fun stopGyro() {
-        sensorManager.unregisterListener(this, gyroscope)
+        gyroscope?.let { sensorManager.unregisterListener(this, it) }
         gyroActive = false
         Log.d(TAG, "Gyroscope stopped")
     }
 
     fun pauseAll() {
-        sensorManager.unregisterListener(this, accelerometer)
-        sensorManager.unregisterListener(this, gyroscope)
+        accelerometer?.let { sensorManager.unregisterListener(this, it) }
+        gyroscope?.let { sensorManager.unregisterListener(this, it) }
         Log.d(TAG, "All sensors paused")
     }
 

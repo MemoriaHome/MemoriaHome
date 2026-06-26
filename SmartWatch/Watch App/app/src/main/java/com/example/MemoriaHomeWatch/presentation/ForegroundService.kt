@@ -1,6 +1,5 @@
 package com.example.MemoriaHomeWatch.presentation
 
-import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -18,7 +17,6 @@ import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
-import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -27,6 +25,7 @@ import androidx.health.services.client.data.DataType
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.MemoriaHomeWatch.BuildConfig
 import com.example.MemoriaHomeWatch.R
+import com.samsung.android.service.health.tracking.HealthTrackerException
 import com.samsung.android.service.health.tracking.data.DataPoint
 import com.samsung.android.service.health.tracking.data.HealthTrackerType
 import com.samsung.android.service.health.tracking.data.ValueKey
@@ -40,18 +39,19 @@ class ForegroundService : Service(), SensorEventListener {
         private const val NOTIFICATION_ID = 100
         private const val TAG = "ForegroundService"
 
-        private const val WATCHDOG_INTERVAL_MS = 5 * 60 * 1000L
-
         const val ACTION_VITALS_UPDATE = "com.example.MemoriaHomeWatch.VITALS_UPDATE"
         const val EXTRA_HEART_RATE = "heart_rate"
         const val EXTRA_SPO2 = "spo2"
         const val EXTRA_TIMESTAMP = "timestamp"
 
-        // FIX: Explicit stop action — the only reliable way to stop a
-        // foreground service on Wear OS is to have it stop itself
+        // FIX: explicit stop action — calling stopService() from outside isn't
+        // reliably honored by Wear OS once a foreground service is promoted.
         const val ACTION_STOP_SERVICE = "com.example.MemoriaHomeWatch.ACTION_STOP_SERVICE"
-
         var userStopped = false
+
+        // FIX: holds the pending Samsung SDK exception so TrackingActivity (which has
+        // an Activity context) can call resolve() on it — the Service can't.
+        var pendingHealthException: HealthTrackerException? = null
     }
 
     private lateinit var healthSDKManager: HealthSDKManager
@@ -59,7 +59,6 @@ class ForegroundService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
     private var offBodySensor: Sensor? = null
-    private var heartRateSensor: Sensor? = null
     private var isWatchWorn = true
 
     private var currentHeartRate = 0
@@ -73,28 +72,13 @@ class ForegroundService : Service(), SensorEventListener {
 
     private var wakeLock: PowerManager.WakeLock? = null
 
-    private val watchdogHandler = Handler(Looper.getMainLooper())
-    private val watchdogRunnable = object : Runnable {
-        override fun run() {
-            Log.d(TAG, "Watchdog: re-registering heart rate sensor")
-            registerHeartRateSensor()
-            watchdogHandler.postDelayed(this, WATCHDOG_INTERVAL_MS)
-        }
-    }
-
     private var lastMqttPublishTime = 0L
     private val MQTT_PUBLISH_INTERVAL = 2000L
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Lifecycle
-    // ─────────────────────────────────────────────────────────────────────────
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service onCreate")
         userStopped = false
-
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
         initializeManagers()
         setupBackgroundThread()
@@ -102,137 +86,8 @@ class ForegroundService : Service(), SensorEventListener {
         createNotificationChannel()
         startForegroundService()
         startVitalsTracking()
-        startHeartRateSensor()
         startOffBodyDetection()
-        watchdogHandler.post(watchdogRunnable)
     }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // FIX: Handle explicit stop action — call stopForeground + stopSelf
-        // from WITHIN the service. This is more reliable than stopService()
-        // called from outside, especially on Wear OS foreground services.
-        if (intent?.action == ACTION_STOP_SERVICE) {
-            Log.d(TAG, "Stop action received — shutting down cleanly")
-            userStopped = true
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-            stopSelf()
-            return START_NOT_STICKY
-        }
-        Log.d(TAG, "onStartCommand")
-        return START_NOT_STICKY
-    }
-
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        if (!userStopped) {
-            Log.d(TAG, "onTaskRemoved — scheduling restart")
-            val restartIntent = Intent(applicationContext, ForegroundService::class.java)
-            val pendingIntent = PendingIntent.getService(
-                this, 1, restartIntent,
-                PendingIntent.FLAG_IMMUTABLE
-            )
-            (getSystemService(Context.ALARM_SERVICE) as AlarmManager).set(
-                AlarmManager.ELAPSED_REALTIME,
-                SystemClock.elapsedRealtime() + 1000L,
-                pendingIntent
-            )
-        } else {
-            Log.d(TAG, "onTaskRemoved — skipping restart, user stopped manually")
-        }
-        super.onTaskRemoved(rootIntent)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        Log.d(TAG, "Service onDestroy")
-
-        // FIX: Wrap each cleanup step in try-catch so one failure can't
-        // prevent the rest from running (e.g. Samsung SDK throwing on disconnect)
-        try { watchdogHandler.removeCallbacks(watchdogRunnable) } catch (e: Exception) { Log.e(TAG, "watchdog cleanup failed", e) }
-        try { sensorManager.unregisterListener(this) } catch (e: Exception) { Log.e(TAG, "sensor unregister failed", e) }
-        try { healthSDKManager.disconnect() } catch (e: Exception) { Log.e(TAG, "Samsung SDK disconnect failed", e) }
-        try { healthServicesManager.stopPassiveCallback() } catch (e: Exception) { Log.e(TAG, "stopPassiveCallback failed", e) }
-        try { healthServicesManager.stopPassiveService() } catch (e: Exception) { Log.e(TAG, "stopPassiveService failed", e) }
-        try { handlerThread.quitSafely() } catch (e: Exception) { Log.e(TAG, "handlerThread quit failed", e) }
-        try { wakeLock?.release() } catch (e: Exception) { Log.e(TAG, "wakeLock release failed", e) }
-        try { coroutineScope.cancel() } catch (e: Exception) { Log.e(TAG, "coroutineScope cancel failed", e) }
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Wake-Up Heart Rate Sensor
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private fun startHeartRateSensor() {
-        heartRateSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE, true)
-            ?: sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
-
-        if (heartRateSensor != null) {
-            sensorManager.registerListener(
-                this,
-                heartRateSensor,
-                SensorManager.SENSOR_DELAY_NORMAL
-            )
-            Log.d(TAG, "HR sensor registered — isWakeUpSensor: ${heartRateSensor?.isWakeUpSensor}")
-        } else {
-            Log.w(TAG, "Heart rate sensor not available on this device")
-        }
-    }
-
-    private fun registerHeartRateSensor() {
-        heartRateSensor?.let { sensor ->
-            sensorManager.unregisterListener(this, sensor)
-            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
-            Log.d(TAG, "HR sensor re-registered by watchdog")
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Sensor Callbacks
-    // ─────────────────────────────────────────────────────────────────────────
-
-    override fun onSensorChanged(event: SensorEvent?) {
-        event ?: return
-
-        when (event.sensor.type) {
-
-            Sensor.TYPE_HEART_RATE -> {
-                val bpm = event.values[0].toInt()
-                if (bpm > 0) {
-                    currentHeartRate = bpm
-                    Log.d(TAG, "Wake-up sensor HR: $bpm BPM")
-                    publishToMQTT("heart_rate", bpm.toString())
-                    updateNotification()
-                    broadcastToUI()
-                }
-            }
-
-            Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT -> {
-                val wasWorn = isWatchWorn
-                isWatchWorn = event.values[0].toInt() == 1
-
-                if (wasWorn != isWatchWorn) {
-                    Log.d(TAG, "Watch wear state: ${if (isWatchWorn) "Worn" else "Removed"}")
-                    if (isWatchWorn) {
-                        healthSDKManager.resumeAllTrackers()
-                        startGooglePassiveMonitoring()
-                        registerHeartRateSensor()
-                    } else {
-                        healthSDKManager.pauseAllTrackers()
-                        healthServicesManager.stopPassiveCallback()
-                    }
-                    updateNotification()
-                }
-            }
-        }
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Setup Helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun initializeManagers() {
         mqttManager = MQTTManager { message ->
@@ -248,6 +103,10 @@ class ForegroundService : Service(), SensorEventListener {
             },
             onResolution = { exception ->
                 Log.e(TAG, "Samsung SDK resolution needed", exception)
+                // FIX: HealthTrackerException.resolve() requires an Activity — store
+                // the exception and hand resolution off to TrackingActivity instead
+                // of calling exception.resolve(this) on a Service (type mismatch).
+                pendingHealthException = exception
                 val resolutionIntent = Intent(this, TrackingActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     putExtra("samsung_sdk_resolution", true)
@@ -302,69 +161,6 @@ class ForegroundService : Service(), SensorEventListener {
         }
     }
 
-    private fun setupBackgroundThread() {
-        handlerThread = HandlerThread("VitalsServiceThread").apply { start() }
-        serviceHandler = Handler(handlerThread.looper)
-    }
-
-    private fun setupWakeLock() {
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "MemoriaHome:VitalsWakeLock"
-        ).apply {
-            setReferenceCounted(false)
-            acquire()
-        }
-        Log.d(TAG, "WakeLock acquired indefinitely")
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Continuous vitals tracking"
-                setShowBadge(false)
-            }
-            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                .createNotificationChannel(channel)
-        }
-    }
-
-    private fun startForegroundService() {
-        try {
-            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Memoria Home")
-                .setContentText("Starting vitals monitoring...")
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .build()
-
-            ServiceCompat.startForeground(
-                this,
-                NOTIFICATION_ID,
-                notification,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
-                else 0
-            )
-            Log.d(TAG, "Foreground service started")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start foreground service", e)
-        }
-    }
-
-    private fun startVitalsTracking() {
-        Log.d(TAG, "Vitals tracking started")
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Data Handlers
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun handleSamsungData(type: HealthTrackerType, dataPoints: List<DataPoint?>) {
         coroutineScope.launch {
             for (data in dataPoints) {
@@ -374,7 +170,7 @@ class ForegroundService : Service(), SensorEventListener {
                         val heartRate = data.getValue(ValueKey.HeartRateSet.HEART_RATE)
                         if (heartRate > 0) {
                             currentHeartRate = heartRate
-                            Log.d(TAG, "Samsung SDK HR: $heartRate")
+                            Log.d(TAG, "Samsung HR: $heartRate")
                             publishToMQTT("heart_rate", heartRate.toString())
                             updateNotification()
                             broadcastToUI()
@@ -394,7 +190,7 @@ class ForegroundService : Service(), SensorEventListener {
                 val heartRate = latest.value.toInt()
                 if (heartRate > 0) {
                     currentHeartRate = heartRate
-                    Log.d(TAG, "Google Health Services HR: $heartRate")
+                    Log.d(TAG, "Google HR: $heartRate")
                     publishToMQTT("heart_rate", heartRate.toString())
                     updateNotification()
                     broadcastToUI()
@@ -414,7 +210,9 @@ class ForegroundService : Service(), SensorEventListener {
                     Log.d(TAG, "MQTT Published: $payload")
                 } catch (e: Exception) {
                     Log.e(TAG, "MQTT Publish failed", e)
-                    if (e.message?.contains("not connected") == true) connectMQTT()
+                    if (e.message?.contains("not connected") == true) {
+                        connectMQTT()
+                    }
                 }
             }
         }
@@ -428,9 +226,9 @@ class ForegroundService : Service(), SensorEventListener {
         )
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Memoria Home — Monitoring Active")
-            .setContentText("$currentHeartRate BPM | ${if (isWatchWorn) "Worn" else "Off Wrist"}")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Memoria Home - Monitoring Active")
+            .setContentText("$currentHeartRate BPM | Status: ${if (isWatchWorn) "Worn" else "Off"}")
+            .setSmallIcon(R.drawable.ic_heart_rate)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
@@ -440,9 +238,11 @@ class ForegroundService : Service(), SensorEventListener {
             this,
             NOTIFICATION_ID,
             notification,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
-            else 0
+            } else {
+                0
+            }
         )
     }
 
@@ -452,14 +252,140 @@ class ForegroundService : Service(), SensorEventListener {
             putExtra(EXTRA_SPO2, currentSpO2)
             putExtra(EXTRA_TIMESTAMP, System.currentTimeMillis())
         }
+        // FIX: LocalBroadcastManager keeps this inside the app instead of system-wide.
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
     private fun startOffBodyDetection() {
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         offBodySensor = sensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT)
+
         offBodySensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
             Log.d(TAG, "Off-body detection started")
-        } ?: Log.w(TAG, "Off-body sensor not available on this device")
+        } ?: Log.w(TAG, "Off-body sensor not available")
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        event?.let {
+            if (it.sensor.type == Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT) {
+                val wasWorn = isWatchWorn
+                isWatchWorn = it.values[0].toInt() == 1
+
+                if (wasWorn != isWatchWorn) {
+                    Log.d(TAG, "Watch wear state changed: ${if (isWatchWorn) "Worn" else "Not worn"}")
+
+                    if (isWatchWorn) {
+                        healthSDKManager.resumeAllTrackers()
+                        startGooglePassiveMonitoring()
+                    } else {
+                        healthSDKManager.pauseAllTrackers()
+                        healthServicesManager.stopPassiveCallback()
+                    }
+                    updateNotification()
+                }
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    private fun setupBackgroundThread() {
+        handlerThread = HandlerThread("VitalsServiceThread").apply {
+            start()
+        }
+        serviceHandler = Handler(handlerThread.looper)
+    }
+
+    private fun setupWakeLock() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "MemoriaHome:VitalsWakeLock"
+        ).apply {
+            setReferenceCounted(false)
+            // FIX: indefinite acquisition — a 30-minute timeout contradicted the
+            // stated goal of continuous 24/7 monitoring. Released in onDestroy().
+            acquire()
+        }
+        Log.d(TAG, "WakeLock acquired indefinitely")
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Continuous vitals tracking"
+                setShowBadge(false)
+            }
+
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun startForegroundService() {
+        try {
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Memoria Home")
+                .setContentText("Starting vitals monitoring...")
+                .setSmallIcon(R.drawable.ic_heart_rate)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+
+            ServiceCompat.startForeground(
+                service = this,
+                id = NOTIFICATION_ID,
+                notification = notification,
+                foregroundServiceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+                } else {
+                    0
+                }
+            )
+            Log.d(TAG, "Foreground service started")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start foreground service", e)
+        }
+    }
+
+    private fun startVitalsTracking() {
+        Log.d(TAG, "Vitals tracking started")
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // FIX: handle explicit stop action — the service stops itself via
+        // stopForeground()+stopSelf(), which Wear OS honors more reliably than
+        // an external stopService() call.
+        if (intent?.action == ACTION_STOP_SERVICE) {
+            Log.d(TAG, "Stop action received — shutting down cleanly")
+            userStopped = true
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        Log.d(TAG, "onStartCommand called")
+        // FIX: START_NOT_STICKY — START_STICKY would let the OS silently
+        // recreate this service after being killed, even post-stop.
+        return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d(TAG, "Service onDestroy")
+
+        sensorManager.unregisterListener(this)
+        healthSDKManager.disconnect()
+        healthServicesManager.stopPassiveCallback()
+        healthServicesManager.stopPassiveService()
+        handlerThread.quitSafely()
+        wakeLock?.release()
+        coroutineScope.cancel()
     }
 }

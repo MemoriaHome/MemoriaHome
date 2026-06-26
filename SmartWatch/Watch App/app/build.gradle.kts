@@ -23,6 +23,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+
     }
 
     buildTypes {
@@ -57,6 +58,10 @@ android {
 }
 
 dependencies {
+    implementation(libs.activity.ktx)
+    implementation(libs.appcompat)
+    implementation(libs.constraintlayout)
+    implementation(libs.material)
     implementation(libs.play.services.wearable)
     implementation(platform(libs.compose.bom))
     implementation(libs.ui)
@@ -84,7 +89,4 @@ dependencies {
     implementation("androidx.health:health-services-client:1.1.0-beta01")
     // ListenableFuture error
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.7.3")
-
-    // LocalBroadcastManager fix
-    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
 }

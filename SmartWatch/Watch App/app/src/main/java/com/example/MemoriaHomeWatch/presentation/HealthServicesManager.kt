@@ -12,9 +12,6 @@ import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.DataTypeAvailability
 import androidx.health.services.client.data.DeltaDataType
 import androidx.health.services.client.data.PassiveListenerConfig
-import kotlin.math.log
-import kotlin.text.clear
-import kotlin.text.set
 
 class PassiveDataService : PassiveListenerService() {
     override fun onNewDataPointsReceived(dataPoints: DataPointContainer) {
@@ -28,7 +25,7 @@ class PassiveDataService : PassiveListenerService() {
 class HealthServicesManager(
     private val context: Context
 ) {
-    val TAG = "TrackActivityy"
+    private val TAG = "HealthServicesManager" // FIX: was "TrackActivityy", copy-pasted from another file
 
     val healthClient = HealthServices.getClient(context)
     val measureClient = healthClient.measureClient
@@ -39,9 +36,7 @@ class HealthServicesManager(
 
     val passiveMonitoringClient = healthClient.passiveMonitoringClient
 
-
-    fun startMeasuring(dataType: DeltaDataType<*, *>, dataReceived: (DataType<*, *>, DataPointContainer) -> Unit){
-        Log.d(TAG, "Connected to Health client")
+    fun startMeasuring(dataType: DeltaDataType<*, *>, dataReceived: (DataType<*, *>, DataPointContainer) -> Unit) {
         activeDataReceivers[dataType] = dataReceived
         val callback = object : MeasureCallback {
             override fun onAvailabilityChanged(dataType: DeltaDataType<*, *>, availability: Availability) {
@@ -53,26 +48,39 @@ class HealthServicesManager(
                 if (!isPaused) dataReceived(dataType, data)
             }
         }
-        measureClient.registerMeasureCallback(dataType, callback)
-        activeMeasureCallbacks[dataType] = callback
+        // FIX: registerMeasureCallback can throw if the data type isn't supported
+        // on this device or the permission hasn't been granted yet — was unguarded.
+        try {
+            measureClient.registerMeasureCallback(dataType, callback)
+            activeMeasureCallbacks[dataType] = callback
+            Log.d(TAG, "Started measuring ${dataType.name}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start measuring ${dataType.name}: ${e.message}")
+        }
     }
 
-    fun stopMeasuring(dataType: DeltaDataType<*, *>){
+    fun stopMeasuring(dataType: DeltaDataType<*, *>) {
         activeDataReceivers.remove(dataType)
-        activeMeasureCallbacks[dataType]?.let {
-            callback ->
-            measureClient.unregisterMeasureCallbackAsync(dataType, callback)
-            activeMeasureCallbacks.remove(dataType)
-            Log.d(TAG, "Stopped measuring ${dataType.name}")
+        activeMeasureCallbacks[dataType]?.let { callback ->
+            try {
+                measureClient.unregisterMeasureCallbackAsync(dataType, callback)
+                Log.d(TAG, "Stopped measuring ${dataType.name}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to stop measuring ${dataType.name}: ${e.message}")
+            } finally {
+                activeMeasureCallbacks.remove(dataType)
+            }
         } ?: Log.d(TAG, "Tracker ${dataType.name} is not active")
-
     }
-
 
     fun pauseAllMeasuring() {
         isPaused = true
         activeMeasureCallbacks.forEach { (dataType, callback) ->
-            measureClient.unregisterMeasureCallbackAsync(dataType, callback)
+            try {
+                measureClient.unregisterMeasureCallbackAsync(dataType, callback)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to pause ${dataType.name}: ${e.message}")
+            }
         }
         activeMeasureCallbacks.clear()
         Log.d(TAG, "All measuring paused")
@@ -90,8 +98,12 @@ class HealthServicesManager(
                     if (!isPaused) dataReceived(dataType, data)
                 }
             }
-            measureClient.registerMeasureCallback(dataType, callback)
-            activeMeasureCallbacks[dataType] = callback
+            try {
+                measureClient.registerMeasureCallback(dataType, callback)
+                activeMeasureCallbacks[dataType] = callback
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to resume ${dataType.name}: ${e.message}")
+            }
         }
         isPaused = false
         Log.d(TAG, "All measuring resumed")
@@ -104,36 +116,47 @@ class HealthServicesManager(
         Log.d(TAG, "All measuring reset")
     }
 
-    // passive monitoring Service's not ready yet
-    // PassiveMonitoringClient only allows one callback to be registered at a time for the whole app
-    // the second call will replace the first one
-    fun startPassiveMonitoring(dataType: Set<DataType<*, *>>, dataReceived: (DataPointContainer) -> Unit, useService: Boolean){
+    fun startPassiveMonitoring(dataType: Set<DataType<*, *>>, dataReceived: (DataPointContainer) -> Unit, useService: Boolean) {
         val passiveListenerConfig = PassiveListenerConfig.builder()
             .setDataTypes(dataType)
             .build()
         Log.d(TAG, "Starting passive monitoring")
 
-        if(useService){
-            Log.d(TAG, "Using Passive Data Service")
-            passiveMonitoringClient.setPassiveListenerServiceAsync(PassiveDataService::class.java, passiveListenerConfig)
-        } else{
-            Log.d(TAG, "Using Passive Data Callback")
-            val passiveListenerCallback: PassiveListenerCallback =
-                object : PassiveListenerCallback {
-                    override fun onNewDataPointsReceived(dataPoints: DataPointContainer) {
-                        dataReceived(dataPoints)
+        // FIX: this can throw if BODY_SENSORS_BACKGROUND / READ_HEALTH_DATA_IN_BACKGROUND
+        // hasn't been granted yet — critical now that StartupReceiver calls this on boot,
+        // before the user has necessarily opened PermissionActivity.
+        try {
+            if (useService) {
+                Log.d(TAG, "Using Passive Data Service")
+                passiveMonitoringClient.setPassiveListenerServiceAsync(PassiveDataService::class.java, passiveListenerConfig)
+            } else {
+                Log.d(TAG, "Using Passive Data Callback")
+                val passiveListenerCallback: PassiveListenerCallback =
+                    object : PassiveListenerCallback {
+                        override fun onNewDataPointsReceived(dataPoints: DataPointContainer) {
+                            dataReceived(dataPoints)
+                        }
                     }
-                }
-            passiveMonitoringClient.setPassiveListenerCallback(passiveListenerConfig, passiveListenerCallback)
+                passiveMonitoringClient.setPassiveListenerCallback(passiveListenerConfig, passiveListenerCallback)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start passive monitoring: ${e.message}")
         }
     }
 
-    fun stopPassiveCallback(){
-        passiveMonitoringClient.clearPassiveListenerCallbackAsync()
-    }
-    fun stopPassiveService(){
-        passiveMonitoringClient.clearPassiveListenerServiceAsync()
+    fun stopPassiveCallback() {
+        try {
+            passiveMonitoringClient.clearPassiveListenerCallbackAsync()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear passive callback: ${e.message}")
+        }
     }
 
+    fun stopPassiveService() {
+        try {
+            passiveMonitoringClient.clearPassiveListenerServiceAsync()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear passive service: ${e.message}")
+        }
+    }
 }
-
