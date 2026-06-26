@@ -4,36 +4,22 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.health.services.client.data.DataType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.Worker
-import androidx.work.WorkerParameters
-import kotlinx.coroutines.runBlocking
 
 class StartupReceiver : BroadcastReceiver() {
-    override fun onReceive(p0: Context, p1: Intent) {
-        if (p1.action != Intent.ACTION_BOOT_COMPLETED) return
 
-
-
-        WorkManager.getInstance(p0).enqueue(
-            OneTimeWorkRequestBuilder<RegisterForPassiveDataWorker>().build()
-        )
+    companion object {
+        private const val TAG = "StartupReceiver"
     }
-}
 
-class RegisterForPassiveDataWorker(
-    private val appContext: Context,
-    workerParams: WorkerParameters
-) : Worker(appContext, workerParams) {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
 
-    override fun doWork(): Result {
-        runBlocking {
-            HealthServicesManager(appContext).startPassiveMonitoring(setOf(DataType.HEART_RATE_BPM),
-                {data -> TrackingActivity.dataHandlePassive(data)},
-                false)
-        }
-        return Result.success()
+        Log.d(TAG, "Boot completed — starting ForegroundService")
+
+        // Directly start the ForegroundService which handles everything:
+        // wake-up HR sensor, Samsung SDK, Google Health Services, MQTT, WakeLock
+        context.startForegroundService(
+            Intent(context, ForegroundService::class.java)
+        )
     }
 }

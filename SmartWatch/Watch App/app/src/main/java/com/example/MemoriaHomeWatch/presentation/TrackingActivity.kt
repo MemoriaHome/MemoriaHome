@@ -1,6 +1,10 @@
 package com.example.MemoriaHomeWatch.presentation
 
-import android.hardware.Sensor
+import android.app.ActivityManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -19,232 +23,197 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.health.services.client.data.DataPointContainer
-import androidx.health.services.client.data.DataType
 import androidx.lifecycle.lifecycleScope
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.tooling.preview.devices.WearDevices
-import com.example.MemoriaHomeWatch.BuildConfig
-import com.example.MemoriaHomeWatch.presentation.MainActivity.Companion.mqtt
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
 
 class TrackingActivity : ComponentActivity() {
 
-    companion object { // companion objects can be referenced from another class
-        const val TAG = "TrackActivityy"
+    companion object {
+        const val TAG = "TrackingActivity"
+    }
 
-        // handles data from the PassiveMonitoringClient in HealthServiceManager (google's Health Service API)
-        fun dataHandlePassive(data: DataPointContainer){
-            val heartRatePoints = data.getData(DataType.HEART_RATE_BPM)
-            if (heartRatePoints.isNotEmpty()) {
-                val latest = heartRatePoints.last()
+    private var isTracking by mutableStateOf(false)
+    private var activeSensors by mutableStateOf(setOf<String>())
+    private var heartRate by mutableStateOf("--")
+    private var acclrData by mutableStateOf("--")
 
-                Log.d(TAG, "HEART_RATE_BPM: ${latest.value}")
+    private lateinit var sensorManager: SensorManagerWrapper
+    private var offBodyDebounceJob: kotlinx.coroutines.Job? = null
 
-                val hrValue = latest.value
-                Log.d(TAG, "HEART_RATE_BPM: $hrValue")
-
-                try {
-                    mqtt.publish("watch-data", hrValue.toString(), 1)
-                } catch (e: Exception) {
-                    Log.d("MQTT", "Publish failed: ${e.message}")
-                    if (e.message == "Client is not connected"){
-                        mqtt.mqttConnect(MainActivity.ipAddress, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false )
-                    }
+    private val vitalsReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == ForegroundService.ACTION_VITALS_UPDATE) {
+                val hr = intent.getIntExtra(ForegroundService.EXTRA_HEART_RATE, 0)
+                if (hr > 0) {
+                    heartRate = hr.toString()
+                    Log.d(TAG, "Received HR from ForegroundService: $hr")
                 }
             }
         }
     }
-    private var offBodyDebounceJob: kotlinx.coroutines.Job? = null
 
-    private var isTracking by mutableStateOf(false)
-    private var activeSensors by mutableStateOf(setOf(""))
-
-    private var heartRate by mutableStateOf("--")
-    private var acclrData by mutableStateOf("--")
-
-    lateinit var googleServicesManager: HealthServicesManager // google's
-    private lateinit var sensorManager : SensorManagerWrapper // interacts with hardware
-    private var offBodySensor : Sensor? = null
-    private var isOffBody = false
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // Lifecycle
+    // ─────────────────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        isTracking = isServiceRunning()
+        if (isTracking) activeSensors = setOf("HR")
+
+        if (intent?.getBooleanExtra("samsung_sdk_resolution", false) == true) {
+            Log.d(TAG, "Handling Samsung SDK resolution")
+        }
+
+        setupSensorManager()
+
+        setContent {
+            MaterialTheme {
+                TrackAppUi(
+                    onToggle = { toggleTracking() },
+                    onToggleHR = { toggleSensor("HR") },
+                    onToggleAcclr = { toggleSensor("Acclr") },
+                    isTracking = isTracking,
+                    heartRate = heartRate,
+                    acclrData = acclrData,
+                    activeSensors = activeSensors
+                )
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            vitalsReceiver,
+            IntentFilter(ForegroundService.ACTION_VITALS_UPDATE)
+        )
+        Log.d(TAG, "Registered vitals broadcast receiver")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(vitalsReceiver)
+        Log.d(TAG, "Unregistered vitals broadcast receiver")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d(TAG, "TrackingActivity onDestroy")
+        if (::sensorManager.isInitialized) {
+            sensorManager.stopAll()
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Sensor Setup
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun setupSensorManager() {
         sensorManager = SensorManagerWrapper(
             context = this,
             onOffBody = { worn ->
                 offBodyDebounceJob?.cancel()
                 offBodyDebounceJob = lifecycleScope.launch {
-                    kotlinx.coroutines.delay(500) // wait 500ms before acting
+                    delay(500)
                     if (worn) {
-                        if (isTracking) {
-                            googleServicesManager.resumeAllMeasuring()
-                            sensorManager.resumeAll()
-                            Toast.makeText(this@TrackingActivity, "Watch on", Toast.LENGTH_LONG).show()
-                        }
                         heartRate = "--"
+                        Toast.makeText(this@TrackingActivity, "Watch on", Toast.LENGTH_SHORT).show()
                     } else {
-                        googleServicesManager.pauseAllMeasuring()
-                        sensorManager.pauseAll()
-                        heartRate = "Sensor off wrist"
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            publish("Sensor off wrist", "watch-data")
-                        }
-                        Toast.makeText(this@TrackingActivity, "Watch removed", Toast.LENGTH_LONG).show()
+                        heartRate = "Off wrist"
+                        Toast.makeText(this@TrackingActivity, "Watch removed", Toast.LENGTH_SHORT).show()
                     }
+                    Log.d(TAG, "Off-body state changed — worn: $worn")
                 }
             },
             onAcclr = { x, y, z ->
-                acclrData = "x:$x \ny:$y \nz:$z"
-//                lifecycleScope.launch(Dispatchers.IO) {
-//                    publish(acclrData, "watch-data")
-//                }
-                Log.d(TAG, "Acclr: x=$x, y=$y,z=$z")
-            })
-
+                if (activeSensors.contains("Acclr")) {
+                    acclrData = "x:$x \ny:$y \nz:$z"
+                }
+                Log.d(TAG, "Acclr: x=$x, y=$y, z=$z")
+            }
+        )
         sensorManager.startOffBody()
-        googleServicesManager = HealthServicesManager(this)
+    }
 
-        setContent {
-            MaterialTheme {
-                TrackAppUi(onExit = {buttonClicked()}, buttontext)
+    // ─────────────────────────────────────────────────────────────────────────
+    // Tracking Control
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun toggleTracking() {
+        if (isTracking) {
+            ForegroundService.userStopped = true
+
+            if (activeSensors.contains("Acclr")) {
+                sensorManager.stopAcclr()
+                Log.d(TAG, "Accelerometer stopped on tracking stop")
             }
-        }
-    }
 
-
-    // handles data from the HealthSDKManager (Samsung's Health Tracking SDK)
-    private fun dataHandleSDK(type: HealthTrackerType, p0: List<DataPoint?>) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            for (data in p0) {
-                data ?: continue
-
-                when (type){
-                    HealthTrackerType.HEART_RATE_CONTINUOUS -> {
-                        val hrData = data.getValue(ValueKey.HeartRateSet.HEART_RATE)
-                        launch {
-                            try {
-                                mqtt.publish("watch-data", hrData.toString(), 1)
-                            } catch (e: Exception) {
-
-                                Log.e("MQTT", "Publish failed: ${e.message}")
-
-                                Log.d("MQTT", "Publish failed: ${e.message}")
-                            }
-                        }
-                        Log.d(TAG, "Heart Rate: $hrData")
-                    }
-
-                    HealthTrackerType.ACCELEROMETER_CONTINUOUS -> {
-                        val accelDataX = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_X)
-                        val accelDataY = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_Y)
-                        val accelDataZ = data.getValue(ValueKey.AccelerometerSet.ACCELEROMETER_Z)
-
-                        launch {
-                            try {
-                                var payload = "{\\\"x\\\":$accelDataX, \\\"y\\\":$accelDataY, \\\"z\\\":$accelDataZ}"
-                                mqtt.publish("watch-data", payload, 1)
-                            } catch (e: Exception) {
-                                Log.e("MQTT", "Publish failed: ${e.message}")
-                            }
-                        }
-
-                        Log.d(TAG, "Accelerometer X: $accelDataX, Y: $accelDataY, Z: $accelDataZ")
-                    }
-                    else -> { }
-                }
+            // FIX: Instead of stopService() from outside (unreliable for foreground
+            // services on Wear OS), send an explicit stop action so the service
+            // calls stopForeground() + stopSelf() on itself — the only guaranteed way
+            val stopIntent = Intent(this, ForegroundService::class.java).apply {
+                action = ForegroundService.ACTION_STOP_SERVICE
             }
-        }
-    }
+            startService(stopIntent)
 
-    // handles data from the MeasureClient in HealthServiceManager (google's Health Service API)
-    private fun dataHandleMeassure(type: DataType<*, *>, data: DataPointContainer){
-        when (type){
-            DataType.HEART_RATE_BPM -> {
-                val latest = data.getData(DataType.HEART_RATE_BPM).lastOrNull()
-                if (latest != null && latest.value > 0) {
-                    heartRate = latest.value.toInt().toString()
-                    Log.d(TAG, "HEART_RATE_BPM: ${latest.value}")
-                    lifecycleScope.launch(Dispatchers.IO) {
-                        publish(heartRate, "watch-data")
-                    }
-                }
-            }
-        }
-    }
-
-    private fun publish(data: String, topic: String){
-        try {
-            mqtt.publish(topic, data, 1)
-        } catch (e: Exception) {
-            Log.e("MQTT", "Publish failed: ${e.message}")
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        Log.d(TAG, "TrackingActivity Destroyed")
-        if(::mSensorManager.isInitialized){ mSensorManager.unregisterListener(this); }
-
-        healthSDKManager.disconnect()
-
-        healthServicesManager.stopPassiveCallback()
-        healthServicesManager.stopPassiveService()
-    }
-
-    override fun onAccuracyChanged(p0: Sensor?, p1: Int) {
-        //
-    }
-
-    override fun onSensorChanged(p0: SensorEvent?) {
-        val offBodyDataFloat = p0?.values[0]
-        val offBodyData = offBodyDataFloat?.toInt()
-        if (offBodyData == 1){
-            Log.d(TAG, "Watch is being worn")
-            healthSDKManager.resumeAllTrackers()
-        } else {
-            Log.d(TAG, "Watch is NOT being worn")
-            Toast.makeText(this, "Watch removed",Toast.LENGTH_LONG).show()
-            healthSDKManager.pauseAllTrackers()
-        }
-    }
-
-    private fun startOffBodySensor(){
-        mSensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        offBodySensor = mSensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT)
-        mSensorManager.registerListener(this, offBodySensor, SensorManager.SENSOR_DELAY_NORMAL)
-    }
-
-    private fun startTracking() {
-        startOffBodySensor()
-        //healthSDKManager.startTracker(HealthTrackerType.ACCELEROMETER_CONTINUOUS)
-        healthSDKManager.startTracker(HealthTrackerType.HEART_RATE_CONTINUOUS)
-        buttontext = "Stop Tracking"
-        isTracking = true
-    }
-
-    private fun buttonClicked(){
-        if(isTracking){
-            if(::mSensorManager.isInitialized){ mSensorManager.unregisterListener(this); }
-            healthSDKManager.pauseAllTrackers()
-            buttontext = "Start Tracking"
             isTracking = false
+            activeSensors = emptySet()
+            heartRate = "--"
+            acclrData = "--"
+            Log.d(TAG, "Tracking stopped — stop intent sent to ForegroundService")
         } else {
-            startOffBodySensor()
-            healthSDKManager.resumeAllTrackers()
-            mqtt.mqttConnect(BuildConfig.MQTT_BROKER, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false )
-            buttontext = "Stop Tracking"
+            startForegroundService(Intent(this, ForegroundService::class.java))
             isTracking = true
+            activeSensors = setOf("HR")
+            Log.d(TAG, "Tracking started — ForegroundService started")
         }
+    }
+
+    private fun toggleSensor(sensor: String) {
+        activeSensors = if (activeSensors.contains(sensor)) {
+            activeSensors - sensor
+        } else {
+            activeSensors + sensor
+        }
+
+        if (sensor == "Acclr") {
+            if (activeSensors.contains("Acclr")) {
+                sensorManager.startAcclr()
+                Log.d(TAG, "Accelerometer enabled")
+            } else {
+                sensorManager.stopAcclr()
+                acclrData = "--"
+                Log.d(TAG, "Accelerometer disabled")
+            }
+        }
+
+        Log.d(TAG, "Active sensors: $activeSensors")
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Suppress("DEPRECATION")
+    private fun isServiceRunning(): Boolean {
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return manager.getRunningServices(Int.MAX_VALUE)
+            .any { it.service.className == ForegroundService::class.java.name }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Composable UI
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun TrackAppUi(
@@ -264,8 +233,7 @@ fun TrackAppUi(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                top = 0.dp
-                ,
+                top = 0.dp,
                 bottom = 16.dp,
                 start = 8.dp,
                 end = 8.dp
@@ -328,7 +296,7 @@ fun TrackAppUi(
                     }
                 }
             }
-            item{
+            item {
                 androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(5.dp))
             }
             item {
@@ -345,7 +313,7 @@ fun TrackAppUi(
                     )
                 ) {
                     Text(
-                        text = if (isTracking) "Pause All" else "Start Tracking",
+                        text = if (isTracking) "Stop Monitoring" else "Start Monitoring",
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.caption1
                     )

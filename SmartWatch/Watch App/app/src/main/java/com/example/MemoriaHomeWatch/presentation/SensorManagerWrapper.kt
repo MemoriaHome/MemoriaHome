@@ -3,8 +3,8 @@ package com.example.MemoriaHomeWatch.presentation
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
-import android.hardware.SensorManager
 import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.util.Log
 
 class SensorManagerWrapper(
@@ -18,7 +18,10 @@ class SensorManagerWrapper(
     private var offBodySensor: Sensor? = null
     private var accelerometer: Sensor? = null
     private var acclrActive = false
-    var isWorn = false
+
+    // Default true — watch is almost certainly being worn when the app starts.
+    // The off-body sensor will correct this immediately if wrong.
+    var isWorn = true
 
     fun startOffBody() {
         offBodySensor = sensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT)
