@@ -6,17 +6,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -32,9 +36,16 @@ class MainActivity : ComponentActivity() {
     companion object {
         lateinit var mqtt: MQTTManager
         var ipAddress by mutableStateOf("")
+        const val NGROK_DOMAIN_SUFFIX = "tcp.eu.ngrok.io"
+
+        fun buildNgrokAddress(subdomainNumber: String, port: String): String {
+            return "tcp://$subdomainNumber.$NGROK_DOMAIN_SUFFIX:$port"
+        }
     }
 
     private var receivedMessage by mutableStateOf("No message received")
+    private var subdomainInput by mutableStateOf("6")
+    private var portInput by mutableStateOf("12201")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -49,11 +60,21 @@ class MainActivity : ComponentActivity() {
             ConnectToHubTheme {
                 WearApp(
                     message = receivedMessage,
-                    ipAddress = ipAddress,
-                    onIpChange = { ipAddress = it },
-                    startClicked = { mqtt.mqttConnect(ipAddress, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false)
-                        receivedMessage = "reconnecting to $ipAddress.." },
+                    subdomainInput = subdomainInput,
+                    onSubdomainChange = { newValue ->
+                        subdomainInput = newValue.filter { it.isDigit() }
+                    },
+                    portInput = portInput,
+                    onPortChange = { newValue ->
+                        portInput = newValue.filter { it.isDigit() }
+                    },
+                    startClicked = {
+                        ipAddress = buildNgrokAddress(subdomainInput, portInput)
+                        mqtt.mqttConnect(ipAddress, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false)
+                        receivedMessage = "reconnecting to $ipAddress.."
+                    },
                     reconnectClicked = {
+                        ipAddress = buildNgrokAddress(subdomainInput, portInput)
                         mqtt.mqttConnect(ipAddress, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false)
                         receivedMessage = "connecting to $ipAddress.."
                         startActivity(Intent(this, PermissionActivity::class.java))
@@ -73,8 +94,10 @@ fun WearApp(
     startClicked: () -> Unit,
     reconnectClicked: () -> Unit,
     message: String,
-    ipAddress: String,
-    onIpChange: (String) -> Unit
+    subdomainInput: String,
+    onSubdomainChange: (String) -> Unit,
+    portInput: String,
+    onPortChange: (String) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -82,24 +105,41 @@ fun WearApp(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Enter MQTT Server IP",
+            text = "ngrok TCP Address",
             style = androidx.wear.compose.material.MaterialTheme.typography.caption2,
             color = androidx.compose.ui.graphics.Color.Gray,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = "tcp://${subdomainInput.ifEmpty { "_" }}.tcp.eu.ngrok.io:${portInput.ifEmpty { "_" }}",
+            style = androidx.wear.compose.material.MaterialTheme.typography.caption3,
+            color = androidx.compose.ui.graphics.Color.DarkGray,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Subdomain #",
+            style = androidx.wear.compose.material.MaterialTheme.typography.caption2,
+            color = androidx.compose.ui.graphics.Color.Gray
+        )
         BasicTextField(
-            value = ipAddress,
-            onValueChange = onIpChange,
+            value = subdomainInput,
+            onValueChange = onSubdomainChange,
             singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             textStyle = androidx.compose.ui.text.TextStyle(
                 color = androidx.compose.ui.graphics.Color.White,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                fontSize = androidx.compose.ui.unit.TextUnit(
+                    18f, androidx.compose.ui.unit.TextUnitType.Sp
+                )
             ),
             decorationBox = { inner ->
-                if (ipAddress.isEmpty()) {
+                if (subdomainInput.isEmpty()) {
                     Text(
-                        "e.g. 192.168.1.1",
+                        "e.g. 6",
                         style = androidx.wear.compose.material.MaterialTheme.typography.caption2,
                         color = androidx.compose.ui.graphics.Color.DarkGray
                     )
@@ -107,6 +147,38 @@ fun WearApp(
                 inner()
             }
         )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = "Port",
+            style = androidx.wear.compose.material.MaterialTheme.typography.caption2,
+            color = androidx.compose.ui.graphics.Color.Gray
+        )
+        BasicTextField(
+            value = portInput,
+            onValueChange = onPortChange,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            textStyle = androidx.compose.ui.text.TextStyle(
+                color = androidx.compose.ui.graphics.Color.White,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                fontSize = androidx.compose.ui.unit.TextUnit(
+                    18f, androidx.compose.ui.unit.TextUnitType.Sp
+                )
+            ),
+            decorationBox = { inner ->
+                if (portInput.isEmpty()) {
+                    Text(
+                        "e.g. 12201",
+                        style = androidx.wear.compose.material.MaterialTheme.typography.caption2,
+                        color = androidx.compose.ui.graphics.Color.DarkGray
+                    )
+                }
+                inner()
+            }
+        )
+
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = message,
@@ -145,8 +217,10 @@ fun WearApp(
 fun DefaultPreview() {
     WearApp(
         message = "No message received",
-        ipAddress = "",
-        onIpChange = {},
+        subdomainInput = "6",
+        onSubdomainChange = {},
+        portInput = "12201",
+        onPortChange = {},
         startClicked = {},
         reconnectClicked = {}
     )
