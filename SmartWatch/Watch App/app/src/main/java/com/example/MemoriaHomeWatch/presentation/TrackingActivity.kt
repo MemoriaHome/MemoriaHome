@@ -58,6 +58,19 @@ class TrackingActivity : ComponentActivity() {
             }
         }
     }
+    private var offBodyDebounceJob: kotlinx.coroutines.Job? = null
+
+    private var isTracking by mutableStateOf(false)
+    private var activeSensors by mutableStateOf(setOf(""))
+
+    private var heartRate by mutableStateOf("--")
+    private var acclrData by mutableStateOf("--")
+    private var gyroData by mutableStateOf("--")
+
+    lateinit var googleServicesManager: HealthServicesManager // google's
+    private lateinit var sensorManager : SensorManagerWrapper // interacts with hardware
+    private var offBodySensor : Sensor? = null
+    private var isOffBody = false
 
     // ─────────────────────────────────────────────────────────────────────────
     // Lifecycle
@@ -135,47 +148,125 @@ class TrackingActivity : ComponentActivity() {
                 }
             },
             onAcclr = { x, y, z ->
-                if (activeSensors.contains("Acclr")) {
-                    acclrData = "x:$x \ny:$y \nz:$z"
+                acclrData = "x:$x \ny:$y \nz:$z"
+                lifecycleScope.launch(Dispatchers.IO) {
+                    publish(buildSensorPayload("acclr", x, y, z), "watch-data")
                 }
-                Log.d(TAG, "Acclr: x=$x, y=$y, z=$z")
-            }
-        )
+                Log.d(TAG, "Acclr: x=$x, y=$y,z=$z")
+            },
+            onGyro = { x, y, z ->
+                gyroData = "x:$x \ny:$y \nz:$z"
+                lifecycleScope.launch(Dispatchers.IO) {
+                    publish(buildSensorPayload("gyro", x, y, z), "watch-data")
+                }
+                Log.d(TAG, "Gyro: x=$x, y=$y, z=$z")
+            })
+
         sensorManager.startOffBody()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Tracking Control
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private fun toggleTracking() {
-        if (isTracking) {
-            ForegroundService.userStopped = true
-
-            if (activeSensors.contains("Acclr")) {
-                sensorManager.stopAcclr()
-                Log.d(TAG, "Accelerometer stopped on tracking stop")
+        setContent {
+            MaterialTheme {
+                TrackAppUi(
+                    onToggle = { stopButtonClicked() },
+                    onToggleHR = {
+                        if (activeSensors.contains("HR")) {
+                            googleServicesManager.stopMeasuring(DataType.HEART_RATE_BPM)
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                publish("Monitoring stopped", "watch-data")
+                            }
+                            activeSensors = activeSensors - "HR"
+                            heartRate = "--"
+                        } else {
+                            if(isTracking && sensorManager.isWorn) {
+                                googleServicesManager.startMeasuring(DataType.HEART_RATE_BPM) { type, data -> dataHandleMeassure(type, data) }
+                                activeSensors = activeSensors + "HR"
+                            }
+                        }
+                    },
+                    onToggleAcclr = {
+                        if(activeSensors.contains("Acclr")){
+                            sensorManager.stopAcclr()
+                            activeSensors = activeSensors - "Acclr"
+                            acclrData = "--"
+                        } else {
+                            if(isTracking && sensorManager.isWorn) {
+                                sensorManager.startAcclr()
+                                activeSensors = activeSensors + "Acclr"
+                            }
+                        }
+                    },
+                    onToggleGyro = {
+                        if(activeSensors.contains("Gyro")){
+                            sensorManager.stopGyro()
+                            activeSensors = activeSensors - "Gyro"
+                            gyroData = "--"
+                        } else {
+                            if(isTracking && sensorManager.isWorn) {
+                                sensorManager.startGyro()
+                                activeSensors = activeSensors + "Gyro"
+                            }
+                        }
+                    },
+                    isTracking = isTracking,
+                    heartRate = heartRate,
+                    acclrData = acclrData,
+                    gyroData = gyroData,
+                    activeSensors = activeSensors
+                )
             }
 
-            // FIX: Instead of stopService() from outside (unreliable for foreground
-            // services on Wear OS), send an explicit stop action so the service
-            // calls stopForeground() + stopSelf() on itself — the only guaranteed way
-            val stopIntent = Intent(this, ForegroundService::class.java).apply {
-                action = ForegroundService.ACTION_STOP_SERVICE
+    private fun stopButtonClicked(){
+        if(isTracking){
+            sensorManager.pauseAll()
+            googleServicesManager.pauseAllMeasuring()
+            lifecycleScope.launch(Dispatchers.IO) {
+                publish("Monitoring paused", "watch-data")
             }
-            startService(stopIntent)
-
             isTracking = false
-            activeSensors = emptySet()
-            heartRate = "--"
-            acclrData = "--"
-            Log.d(TAG, "Tracking stopped — stop intent sent to ForegroundService")
         } else {
-            startForegroundService(Intent(this, ForegroundService::class.java))
+            googleServicesManager.resumeAllMeasuring()
+            if (sensorManager.isWorn) sensorManager.resumeAll()
+            mqtt.mqttConnect(MainActivity.ipAddress, BuildConfig.MQTT_USERNAME, BuildConfig.MQTT_PASSWORD, false )
             isTracking = true
-            activeSensors = setOf("HR")
-            Log.d(TAG, "Tracking started — ForegroundService started")
         }
+    }
+
+    // handles data from the MeasureClient in HealthServiceManager (google's Health Service API)
+    private fun dataHandleMeassure(type: DataType<*, *>, data: DataPointContainer){
+        when (type){
+            DataType.HEART_RATE_BPM -> {
+                val latest = data.getData(DataType.HEART_RATE_BPM).lastOrNull()
+                if (latest != null && latest.value > 0) {
+                    heartRate = latest.value.toInt().toString()
+                    Log.d(TAG, "HEART_RATE_BPM: ${latest.value}")
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        publish(heartRate, "watch-data")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun buildSensorPayload(type: String, x: Float, y: Float, z: Float): String {
+        return "{\"type\":\"$type\",\"x\":$x,\"y\":$y,\"z\":$z,\"ts\":${System.currentTimeMillis()}}"
+    }
+
+    private fun publish(data: String, topic: String){
+        try {
+            mqtt.publish(topic, data, 1)
+        } catch (e: Exception) {
+            Log.e("MQTT", "Publish failed: ${e.message}")
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d(TAG, "TrackingActivity Destroyed")
+        sensorManager.stopAll()
+        googleServicesManager.resetAllMeasuring()
+//        googleServicesManager.stopPassiveCallback()
+//        googleServicesManager.stopPassiveService()
     }
 
     private fun toggleSensor(sensor: String) {
@@ -220,13 +311,16 @@ fun TrackAppUi(
     onToggle: () -> Unit,
     onToggleHR: () -> Unit,
     onToggleAcclr: () -> Unit,
+    onToggleGyro: () -> Unit,
     isTracking: Boolean,
     heartRate: String,
     acclrData: String,
+    gyroData: String,
     activeSensors: Set<String>
 ) {
     val hrActive = activeSensors.contains("HR")
     val acclrActive = activeSensors.contains("Acclr")
+    val gyroActive = activeSensors.contains("Gyro")
 
     Scaffold {
         androidx.wear.compose.foundation.lazy.ScalingLazyColumn(
@@ -255,7 +349,7 @@ fun TrackAppUi(
                 androidx.compose.foundation.layout.Column(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (!hrActive && !acclrActive) {
+                    if (!hrActive && !acclrActive && !gyroActive) {
                         Text(
                             text = "None",
                             style = MaterialTheme.typography.caption2,
@@ -277,7 +371,7 @@ fun TrackAppUi(
                             color = androidx.compose.ui.graphics.Color.Gray
                         )
                     }
-                    if (hrActive && acclrActive) {
+                    if (hrActive && (acclrActive || gyroActive)) {
                         androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(4.dp))
                     }
                     if (acclrActive) {
@@ -289,6 +383,23 @@ fun TrackAppUi(
                         )
                         Text(
                             text = acclrData,
+                            style = MaterialTheme.typography.caption3,
+                            textAlign = TextAlign.Center,
+                            color = androidx.compose.ui.graphics.Color.Gray
+                        )
+                    }
+                    if (acclrActive && gyroActive) {
+                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(4.dp))
+                    }
+                    if (gyroActive) {
+                        Text(
+                            text = "Gyroscope",
+                            style = MaterialTheme.typography.caption2,
+                            textAlign = TextAlign.Center,
+                            color = androidx.compose.ui.graphics.Color.LightGray
+                        )
+                        Text(
+                            text = gyroData,
                             style = MaterialTheme.typography.caption3,
                             textAlign = TextAlign.Center,
                             color = androidx.compose.ui.graphics.Color.Gray
@@ -363,6 +474,28 @@ fun TrackAppUi(
                     )
                 }
             }
+            item {
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(4.dp))
+                Button(
+                    onClick = onToggleGyro,
+                    modifier = Modifier
+                        .fillMaxWidth(0.5f)
+                        .height(20.dp),
+                    colors = androidx.wear.compose.material.ButtonDefaults.buttonColors(
+                        backgroundColor = androidx.compose.ui.graphics.Color(0xFF424242)
+                    )
+                ) {
+                    Text(
+                        text = "Gyroscope",
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.caption2,
+                        color = if (gyroActive)
+                            androidx.compose.ui.graphics.Color.White
+                        else
+                            androidx.compose.ui.graphics.Color.Gray
+                    )
+                }
+            }
         }
     }
 }
@@ -380,10 +513,12 @@ fun TrackingActivityPreview() {
             onToggle = {},
             onToggleHR = {},
             onToggleAcclr = {},
+            onToggleGyro = {},
             isTracking = true,
             heartRate = "72",
             acclrData = "x:0.1 y:9.8 z:0.3",
-            activeSensors = setOf("HR", "Acclr")
+            gyroData = "x:0.01 y:0.02 z:-0.01",
+            activeSensors = setOf("HR", "Acclr", "Gyro")
         )
     }
 }

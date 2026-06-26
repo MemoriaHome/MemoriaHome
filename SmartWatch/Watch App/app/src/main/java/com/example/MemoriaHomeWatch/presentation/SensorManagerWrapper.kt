@@ -10,18 +10,17 @@ import android.util.Log
 class SensorManagerWrapper(
     context: Context,
     private val onOffBody: (Boolean) -> Unit,
-    private val onAcclr: (Float, Float, Float) -> Unit
+    private val onAcclr: (Float, Float, Float) -> Unit,
+    private val onGyro: (Float, Float, Float) -> Unit
 ) : SensorEventListener {
-
     private val TAG = "SensorManagerWrapper"
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private var offBodySensor: Sensor? = null
     private var accelerometer: Sensor? = null
+    private var gyroscope: Sensor? = null
     private var acclrActive = false
-
-    // Default true — watch is almost certainly being worn when the app starts.
-    // The off-body sensor will correct this immediately if wrong.
-    var isWorn = true
+    private var gyroActive = false
+    var isWorn = false
 
     fun startOffBody() {
         offBodySensor = sensorManager.getDefaultSensor(Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT)
@@ -42,13 +41,28 @@ class SensorManagerWrapper(
         Log.d(TAG, "Accelerometer stopped")
     }
 
+    fun startGyro() {
+        gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_NORMAL)
+        gyroActive = true
+        Log.d(TAG, "Gyroscope started")
+    }
+
+    fun stopGyro() {
+        sensorManager.unregisterListener(this, gyroscope)
+        gyroActive = false
+        Log.d(TAG, "Gyroscope stopped")
+    }
+
     fun pauseAll() {
         sensorManager.unregisterListener(this, accelerometer)
+        sensorManager.unregisterListener(this, gyroscope)
         Log.d(TAG, "All sensors paused")
     }
 
     fun resumeAll() {
         if (acclrActive && isWorn) startAcclr()
+        if (gyroActive && isWorn) startGyro()
         Log.d(TAG, "All sensors resumed")
     }
 
@@ -69,6 +83,9 @@ class SensorManagerWrapper(
             }
             Sensor.TYPE_ACCELEROMETER -> {
                 onAcclr(event.values[0], event.values[1], event.values[2])
+            }
+            Sensor.TYPE_GYROSCOPE -> {
+                onGyro(event.values[0], event.values[1], event.values[2])
             }
         }
     }
