@@ -337,10 +337,10 @@ class ForegroundService : Service(), SensorEventListener {
                 .build()
 
             ServiceCompat.startForeground(
-                service = this,
-                id = NOTIFICATION_ID,
-                notification = notification,
-                foregroundServiceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                this,
+                NOTIFICATION_ID,
+                notification,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
                 } else {
                     0
